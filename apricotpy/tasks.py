@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod
 from collections import namedtuple
 
 from . import objects
+from . import futures
 
 __all__ = ['Continue', 'Await', 'Task']
 
@@ -20,6 +21,8 @@ class Continue(_TaskDirective):
 
 class Await(_TaskDirective):
     def __init__(self, awaitable, callback):
+        assert isinstance(awaitable, futures.Awaitable), \
+            "awaitable must be of Awaitable type"
         self.awaitable = awaitable
         self.callback = callback
 
@@ -35,7 +38,6 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
     def __init__(self, loop):
         super(Task, self).__init__(loop)
 
-        self._directive = None
         self._awaiting = None
         self._callback = None
         self._awaiting_result = _NO_RESULT
@@ -52,8 +54,17 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
 
     def on_loop_inserted(self, loop):
         super(Task, self).on_loop_inserted(loop)
-        if self.is_playing():
-            self._schedule_next()
+        if self._awaiting is not None:
+            self._awaiting.add_done_callback(self._await_done)
+        elif not self.done() and self.is_playing():
+            self._schedule_step()
+
+    def on_loop_removed(self):
+        super(Task, self).on_loop_removed()
+        if self._callback_handle is not None:
+            self._callback_handle.cancel()
+        if self._awaiting is not None:
+            self._awaiting.remove_done_callback(self._await_done)
 
     def play(self):
         """
@@ -63,7 +74,7 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
             return False
 
         self._paused = False
-        self._schedule_next()
+        self._schedule_step()
 
         return True
 
@@ -77,9 +88,8 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
         if self.done():
             return False
 
-        if self._callback_handle is not None:
-            self._callback_handle.cancel()
-            self._callback_handle = None
+        self._callback_handle.cancel()
+        self._callback_handle = None
 
         self._paused = True
 
@@ -99,61 +109,40 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
     def execute(self):
         pass
 
-    def _start(self):
+    def _step(self):
         self._callback_handle = None
-        if self._paused:
-            return
-
-        try:
-            result = self.execute()
-        except BaseException as e:
-            self.set_exception(e)
-        else:
-            self._proceed(result)
-
-    def _continue(self, callback, last_result=_NO_RESULT):
-        # Clear everything
-        self._callback_handle = None
-        self._directive = None
-        self._awaiting_result = _NO_RESULT
-        self._callback = None
 
         args = []
-        if last_result is not _NO_RESULT:
-            args.append(last_result)
+        if self._callback:
+            fn = self._callback
+            if self._awaiting_result is not _NO_RESULT:
+                args.append(self._awaiting_result)
+        else:
+            # First time
+            fn = self.execute
 
         try:
-            self._proceed(callback(*args))
+            result = fn(*args)
         except BaseException as e:
-            self.set_exception(e)
-
-    def _proceed(self, result):
-        if isinstance(result, _TaskDirective):
-            if isinstance(result, Continue):
-                self._directive = Continue.__name__
-                self._callback = result.callback
-                self._schedule_next()
-
-            if isinstance(result, Await):
-                self._directive = Await.__name__
-                self._callback = result.callback
-                self._awaiting = result.awaitable
-                self._awaiting.add_done_callback(self._await_done)
-        else:
             # This will also remove us from the loop
-            self.set_result(result)
-
-    def _schedule_next(self):
-        assert self._callback_handle is None, "Callback handle is not None"
-
-        if self._directive is Continue.__name__:
-            self._callback_handle = self.loop().call_soon(self._continue, self._callback)
-        elif self._directive is Await.__name__:
-            if self._awaiting_result is not _NO_RESULT:
-                self._callback_handle = self.loop().call_soon(self._continue, self._callback, self._awaiting_result)
+            self.set_exception(e)
         else:
-            assert self._directive is None, "Unknown directive '{}'".format(self._directive)
-            self._callback_handle = self.loop().call_soon(self._start)
+            if isinstance(result, _TaskDirective):
+                if isinstance(result, Continue):
+                    self._callback = result.callback
+                    self._schedule_step()
+
+                if isinstance(result, Await):
+                    self._callback = result.callback
+                    self._awaiting = result.awaitable
+                    self._awaiting.add_done_callback(self._await_done)
+            else:
+                # This will also remove us from the loop
+                self.set_result(result)
+
+    def _schedule_step(self):
+        assert self._callback_handle is None, "Step already scheduled"
+        self._callback_handle = self.loop().call_soon(self._step)
 
     def _await_done(self, awaitable):
         if self.done():
@@ -166,8 +155,8 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
             self.cancel()
         elif awaitable.exception() is not None:
             self.set_exception(awaitable.exception())
-        elif self._directive is None:
+        elif self._callback is None:
             self.set_result(awaitable.result())
         else:
             self._awaiting_result = awaitable.result()
-            self._schedule_next()
+            self._schedule_step()

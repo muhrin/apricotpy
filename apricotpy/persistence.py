@@ -85,7 +85,7 @@ class PersistableLoopObjectMixin(Persistable):
 
     def load_instance_state(self, loop, saved_state, *args):
         super(PersistableLoopObjectMixin, self).load_instance_state(loop, saved_state, *args)
-        self._loop = loop
+        self._loop = None
         self._uuid = saved_state[self.UUID]
 
 
@@ -129,29 +129,20 @@ class PersistableAwaitableMixin(Persistable):
 
     def load_instance_state(self, loop, saved_state, *args):
         super(PersistableAwaitableMixin, self).load_instance_state(loop, saved_state, *args)
-        self._future = futures.Future(None)
-        # We want to set the state of the Awaitable here but can't because
-        # you can't call any of the setters before loop insertion so save
-        # the state until on_loop_inserted()
-        self.__saved_state = saved_state
+        self._future = futures._FutureBase()
+        self._callbacks = []
 
-    def on_loop_inserted(self, loop):
-        super(PersistableAwaitableMixin, self).on_loop_inserted(loop)
-
-        if self.__saved_state is not None:
+        try:
+            self.set_result(saved_state[self.RESULT])
+        except KeyError:
             try:
-                self.set_result(self.__saved_state[self.RESULT])
+                self.set_exception(saved_state[self.EXCEPTION])
             except KeyError:
                 try:
-                    self.set_exception(self.__saved_state[self.EXCEPTION])
+                    if saved_state[self.CANCELLED]:
+                        self.cancel()
                 except KeyError:
-                    try:
-                        if self.__saved_state[self.CANCELLED]:
-                            self.cancel()
-                    except KeyError:
-                        pass
-
-            self.__saved_state = None
+                    pass
 
 
 class PersistableAwaitableLoopObject(
@@ -199,7 +190,6 @@ class PersistableTask(
     AWAITING = 'AWAITING'
     AWAITING_RESULT = 'AWAITING_RESULT'
     CALLBACK = 'CALLBACK'
-    DIRECTIVE = 'DIRECTIVE'
 
     def __init__(self, loop):
         super(PersistableTask, self).__init__(loop)
@@ -208,32 +198,23 @@ class PersistableTask(
     def save_instance_state(self, out_state):
         super(PersistableTask, self).save_instance_state(out_state)
 
-        out_state[self.DIRECTIVE] = self._directive
-        if self._directive == tasks.Await.__name__:
-
-            # Do we have the result already?
-            if self._awaiting_result is not tasks._NO_RESULT:
-                out_state[self.AWAITING_RESULT] = self._awaiting_result
-            else:
-                awaiting = self.awaiting()
-                try:
-                    bundle = Bundle()
-                    awaiting.save_instance_state(bundle)
-                    out_state[self.AWAITING] = bundle
-                except AttributeError:
-                    raise RuntimeError("Awaitable is not persistable: '{}".format(awaiting.__class__))
-
-            out_state[self.CALLBACK] = self._callback.__name__
-
-        elif self._directive == tasks.Continue.__name__:
-            out_state[self.CALLBACK] = self._callback.__name__
+        out_state[self.CALLBACK] = self._callback
+        if self._awaiting is not None:
+            awaiting = self.awaiting()
+            try:
+                bundle = Bundle()
+                awaiting.save_instance_state(bundle)
+                out_state[self.AWAITING] = bundle
+            except AttributeError:
+                raise RuntimeError("Awaitable is not persistable: '{}".format(awaiting.__class__))
+        if self._awaiting_result is not tasks._NO_RESULT:
+            out_state[self.AWAITING_RESULT] = self._awaiting_result
 
     def load_instance_state(self, loop, saved_state, *args):
         super(PersistableTask, self).load_instance_state(loop, saved_state, *args)
         # have to hold back the saved state until we're inserted
         self.__saved_state = saved_state
 
-        self._directive = None
         self._awaiting = None
         self._callback = None
         self._awaiting_result = tasks._NO_RESULT
@@ -243,20 +224,19 @@ class PersistableTask(
 
     def on_loop_inserted(self, loop):
         # Do this before calling super() so the superclass has the right state
-        if self.__saved_state is not None:
-            saved_state = self.__saved_state
-            self.__saved_state = None
 
-            self._directive = saved_state[self.DIRECTIVE]
-            if self._directive == tasks.Await.__name__:
-                # Do we have the result already?
-                try:
-                    self._awaiting_result = saved_state[self.AWAITING_RESULT]
-                except KeyError:
-                    self._awaiting = load_from(self.loop(), saved_state[self.AWAITING])
-                self._callback = getattr(self, saved_state[self.CALLBACK])
-            elif self._directive == tasks.Continue.__name__:
-                self._callback = getattr(self, saved_state[self.CALLBACK])
+        if self.__saved_state is not None:
+            self._callback = self.__saved_state[self.CALLBACK]
+            try:
+                self._awaiting = load_from(loop, self.__saved_state[self.AWAITING])
+            except KeyError:
+                pass
+            try:
+                self._awaiting_result = self.__saved_state[self.AWAITING_RESULT]
+            except KeyError:
+                pass
+
+            self.__saved_state = None
 
         super(PersistableTask, self).on_loop_inserted(loop)
 

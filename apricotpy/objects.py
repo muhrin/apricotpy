@@ -3,7 +3,10 @@ from uuid import uuid1
 
 from . import futures
 
-__all__ = ['LoopObject', 'TickingMixin', 'AwaitableMixin']
+__all__ = ['LoopObject',
+           'TickingMixin',
+           'TickingLoopObject',
+           'AwaitableMixin']
 
 
 class LoopObject(object):
@@ -15,7 +18,7 @@ class LoopObject(object):
         else:
             self._uuid = uuid
 
-        self._loop = loop
+        self._loop = None
 
     @property
     def uuid(self):
@@ -28,7 +31,7 @@ class LoopObject(object):
         :param loop: The event loop
         :type loop: `apricotpy.AbstractEventLoop`
         """
-        pass
+        self._loop = loop
 
     def on_loop_removed(self):
         """
@@ -83,19 +86,22 @@ class TickingMixin(object):
             self._callback_handle = self.loop().call_soon(self._tick)
 
 
+class TickingLoopObject(TickingMixin, LoopObject):
+    """Convenience class that defines a ticking LoopObject"""
+    pass
+
+
 class AwaitableMixin(futures.Awaitable):
     def __init__(self, *args, **kwargs):
         assert isinstance(self, LoopObject), "Must be used with a loop object"
         super(AwaitableMixin, self).__init__(*args, **kwargs)
-        self._future = futures.Future(None)
+        self._future = futures._FutureBase()
+        self._callbacks = []
 
     def on_loop_inserted(self, loop):
         super(AwaitableMixin, self).on_loop_inserted(loop)
-        self._future._loop = loop
-
-    def on_loop_removed(self):
-        super(AwaitableMixin, self).on_loop_removed()
-        self._future._loop = None
+        if self.done():
+            self._schedule_callbacks()
 
     def done(self):
         return self._future.done()
@@ -104,34 +110,70 @@ class AwaitableMixin(futures.Awaitable):
         return self._future.result()
 
     def set_result(self, result):
-        self._check_inserted()
         self._future.set_result(result)
-        self.loop().remove(self)
+        if self.in_loop():
+            self._schedule_callbacks()
+            self.loop().remove(self)
 
     def exception(self):
         return self._future.exception()
 
     def set_exception(self, exception):
-        self._check_inserted()
         self._future.set_exception(exception)
-        self.loop().remove(self)
+        if self.in_loop():
+            self._schedule_callbacks()
+            self.loop().remove(self)
 
     def cancel(self):
-        self._check_inserted()
         self._future.cancel()
-        self.loop().remove(self)
+        if self.in_loop():
+            self._schedule_callbacks()
+            self.loop().remove(self)
 
     def cancelled(self):
         return self._future.cancelled()
 
     def add_done_callback(self, fn):
-        return self._future.add_done_callback(fn)
+        """
+        Add a callback to be run when the future becomes done.
+
+        :param fn: The callback function.
+        """
+        if self.in_loop() and self.done():
+            self.loop().call_soon(fn, self)
+        else:
+            self._callbacks.append(fn)
 
     def remove_done_callback(self, fn):
-        return self._future.remove_done_callback(fn)
+        """
+        Remove all the instances of the callback function from the call when done list.
+
+        :return: The number of callback instances removed
+        :rtype: int
+        """
+        filtered_callbacks = [f for f in self._callbacks if f != fn]
+        removed_count = len(self._callbacks) - len(filtered_callbacks)
+        if removed_count:
+            self._callbacks[:] = filtered_callbacks
+
+        return removed_count
+
+    def _schedule_callbacks(self):
+        """
+        Ask the event loop to call all callbacks.
+
+        The callbacks are scheduled to be called as soon as possible.
+        """
+        callbacks = self._callbacks[:]
+        if not callbacks:
+            return
+
+        self._callbacks[:] = []
+        for callback in callbacks:
+            self.loop().call_soon(callback, self)
 
     def _check_inserted(self):
-        assert self._future._loop is not None, \
+        assert self.loop() is not None, \
             "Awaitable has not been inserted into the loop yet"
 
 

@@ -1,7 +1,11 @@
 import abc
 import concurrent.futures
 
-__all__ = ['CancelledError', 'Future', 'get_future', 'InvalidStateError']
+__all__ = ['CancelledError',
+           'Awaitable',
+           'Future',
+           'get_future',
+           'InvalidStateError']
 
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
@@ -35,10 +39,6 @@ class Awaitable(object):
         pass
 
     @abc.abstractmethod
-    def cancel(self):
-        pass
-
-    @abc.abstractmethod
     def cancelled(self):
         pass
 
@@ -49,6 +49,59 @@ class Awaitable(object):
     @abc.abstractmethod
     def remove_done_callback(self, fn):
         pass
+
+
+class _FutureBase(object):
+    def __init__(self):
+        self._state = _PENDING
+        self._result = None
+        self._exception = None
+        self._callbacks = []
+
+    def cancel(self):
+        if self.done():
+            return False
+
+        self._state = _CANCELLED
+        return True
+
+    def cancelled(self):
+        return self._state is _CANCELLED
+
+    def done(self):
+        return self._state != _PENDING
+
+    def result(self):
+        if self.cancelled():
+            raise CancelledError()
+        elif self._state is not _FINISHED:
+            raise InvalidStateError("The future has not completed yet")
+        elif self._exception is not None:
+            raise self._exception
+
+        return self._result
+
+    def set_result(self, result):
+        if self.done():
+            raise InvalidStateError("The future is already done")
+
+        self._result = result
+        self._state = _FINISHED
+
+    def set_exception(self, exception):
+        if self.done():
+            raise InvalidStateError("The future is already done")
+
+        self._exception = exception
+        self._state = _FINISHED
+
+    def exception(self):
+        if self.cancelled():
+            raise CancelledError()
+        if self._state is not _FINISHED:
+            raise InvalidStateError("Exception not set")
+
+        return self._exception
 
 
 class Future(Awaitable):

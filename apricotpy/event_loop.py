@@ -53,10 +53,6 @@ class AbstractEventLoop(object):
         pass
 
     @abstractmethod
-    def remove(self, loop_object):
-        pass
-
-    @abstractmethod
     def add_loop_listener(self, listener):
         pass
 
@@ -98,6 +94,29 @@ class AbstractEventLoop(object):
         :param kwargs: (optional) keyword arguments to the task
         
         :return: The task object
+        """
+        pass
+
+    @abstractmethod
+    def create_inserted(self, object_type, *args, **kwargs):
+        """
+        Create a task and schedule it to be inserted into the loop.
+
+        :param object_type: The task identifier 
+        :param args: (optional) positional arguments to the task
+        :param kwargs: (optional) keyword arguments to the task
+
+        :return: The future corresponding to the insertion of the object into the loop
+        """
+        pass
+
+    @abstractmethod
+    def remove(self, loop_object):
+        """
+        Schedule an object to be removed an object from the event loop.
+
+        :param loop_object: The object to remove 
+        :return: A future corresponding to the removal of the object
         """
         pass
 
@@ -247,17 +266,6 @@ class BaseEventLoop(AbstractEventLoop):
     def call_later(self, delay, fn, *args):
         return self._event_loop.call_later(delay, fn, *args)
 
-    def remove(self, loop_object):
-        """
-        Remove an object from the event loop.
-        
-        :param loop_object: The object to remove 
-        :return: A future corresponding to the removal of the object
-        """
-        fut = self.create_future()
-        self._event_loop.call_soon(self._remove, loop_object, fut)
-        return fut
-
     def objects(self, obj_type=None):
         # Filter the type if necessary
         if obj_type is not None:
@@ -306,8 +314,22 @@ class BaseEventLoop(AbstractEventLoop):
             loop_object = self._object_factory(self, object_type, *args, **kwargs)
 
         self._event_loop.call_soon(self._insert, loop_object)
-
         return loop_object
+
+    def create_inserted(self, object_type, *args, **kwargs):
+        if self._object_factory is None:
+            loop_object = object_type(self, *args, **kwargs)
+        else:
+            loop_object = self._object_factory(self, object_type, *args, **kwargs)
+
+        fut = self.create_future()
+        self._event_loop.call_soon(self._insert, loop_object, fut)
+        return fut
+
+    def remove(self, loop_object):
+        fut = self.create_future()
+        self._event_loop.call_soon(self._remove, loop_object, fut)
+        return fut
 
     def set_object_factory(self, factory):
         self._object_factory = factory
@@ -337,11 +359,12 @@ class BaseEventLoop(AbstractEventLoop):
     def _run_until_complete_cb(self, fut):
         self.stop()
 
-    def _insert(self, obj):
+    def _insert(self, obj, fut=None):
         uuid = obj.uuid
         self._objects[uuid] = obj
         obj.on_loop_inserted(self)
-
+        if fut is not None:
+            fut.set_result(obj)
         self.messages().send("loop.object.{}.inserted".format(uuid))
 
     def _remove(self, obj, fut):
@@ -355,8 +378,5 @@ class BaseEventLoop(AbstractEventLoop):
         else:
             obj.on_loop_removed()
             self._objects.pop(uuid)
-
-            self.messages().send("loop.object.{}.removed".format(uuid))
-
             fut.set_result(uuid)
-
+            self.messages().send("loop.object.{}.removed".format(uuid))

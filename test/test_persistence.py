@@ -98,14 +98,12 @@ class PersistableAwaitableFive(apricotpy.PersistableAwaitableLoopObject):
     def on_loop_inserted(self, loop):
         super(PersistableAwaitableFive, self).on_loop_inserted(loop)
         if not self.done():
-            self.set_result(5)
+            self.loop().call_soon(self.set_result, 5)
 
 
 class TestPersistableAwaitable(TestCaseWithPersistenceLoop):
     def test_simple(self):
-        persistable_awaitable = self.loop.create(PersistableAwaitableFive)
-        # Tick to insert
-        self.loop.tick()
+        persistable_awaitable = self.loop.run_until_complete(self.loop.create_inserted(PersistableAwaitableFive))
 
         saved_state = apricotpy.Bundle()
         persistable_awaitable.save_instance_state(saved_state)
@@ -126,9 +124,7 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
             def finish(self):
                 return 5
 
-        task = self.loop.create(PersistableTask)
-        # Tick to insert
-        self.loop.tick()
+        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask))
 
         saved_state = apricotpy.Bundle()
         task.save_instance_state(saved_state)
@@ -149,8 +145,8 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
             def finish(self, value):
                 return value
 
-        task = self.loop.create(PersistableTask)
-        self.loop.tick()  # Insert
+        # Tick 0
+        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask))
 
         saved_state = apricotpy.Bundle()
         task.save_instance_state(saved_state)
@@ -159,9 +155,8 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
         result = self.loop.run_until_complete(task)
         self.assertEqual(result, 5)
 
-        # Create and check
-        task = self.loop.create(PersistableTask, saved_state)
-        self.loop.tick()  # Insert
+        # Tick 1
+        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask, saved_state))
         self.loop.tick()  # Awaiting
         awaiting = task.awaiting()
         self.assertIsNotNone(awaiting)
@@ -174,14 +169,14 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
         self.assertEqual(result, 5)
         self.assertFalse(awaiting.in_loop())
 
-        # Create and check
-        task = self.loop.create(PersistableTask, saved_state)
-        self.loop.tick()  # Insert
+        # Tick 2
+        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask, saved_state))
         self.assertIsNotNone(task.awaiting())
-
         self.loop.run_until_complete(task.awaiting())
 
         saved_state = apricotpy.Bundle()
         task.save_instance_state(saved_state)
 
-
+        # Finish
+        result = self.loop.run_until_complete(task)
+        self.assertEqual(result, 5)
