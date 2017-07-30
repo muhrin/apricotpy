@@ -49,8 +49,6 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
         class Obj(apricotpy.ContextMixin, apricotpy.PersistableLoopObject):
             pass
 
-        print(Obj.__mro__)
-
         # Create object with context
         loop_obj = self.loop.create(Obj)
 

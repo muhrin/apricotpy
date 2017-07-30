@@ -1,10 +1,10 @@
-import thread
-import time
 from abc import ABCMeta, abstractmethod
 from collections import deque
-import itertools
 import logging
 import heapq
+import itertools
+import time
+import threading
 
 from . import futures
 from . import events
@@ -232,7 +232,7 @@ class BaseEventLoop(AbstractEventLoop):
         return futures.Future(self)
 
     def run_forever(self):
-        self._thread_id = thread.get_ident()
+        self._thread_id = threading.current_thread().ident
 
         try:
             while not self._stopping:
@@ -290,7 +290,7 @@ class BaseEventLoop(AbstractEventLoop):
         self._stopping = True
 
     def tick(self):
-        self._thread_id = thread.get_ident()
+        self._thread_id = threading.current_thread().ident
         try:
             self._tick()
         finally:
@@ -389,7 +389,7 @@ class BaseEventLoop(AbstractEventLoop):
                     self._event_loop._ready,
                     self._event_loop._scheduled):
                 try:
-                    if cb._fn.im_self is obj:
+                    if cb._fn.__self__ is obj:
                         cb.cancel()
                         _LOGGER.info("Cancelled callback to '{}' because the loop "
                                      "object was removed".format(cb._fn))

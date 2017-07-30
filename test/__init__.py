@@ -1,6 +1,11 @@
 import logging
 import tempfile
 import os
+import sys
+
+path = os.path.abspath(os.path.dirname(__file__))
+if path not in sys.path:
+    sys.path.append(path)
 
 testfile = os.path.join(tempfile.gettempdir(), 'apricotpy_unittest.log')
 try:

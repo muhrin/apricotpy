@@ -150,7 +150,7 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
     def _set_next_step(self, fn):
         if fn is not None:
             try:
-                assert fn.im_self is self, "Next step function must be a member of this class"
+                assert fn.__self__ is self, "Next step function must be a member of this class"
             except AttributeError:
                 raise AssertionError("Next step function must be a member of this class")
 
