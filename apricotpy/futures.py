@@ -5,7 +5,8 @@ __all__ = ['CancelledError',
            'Awaitable',
            'Future',
            'get_future',
-           'InvalidStateError']
+           'InvalidStateError',
+           'gather']
 
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
@@ -112,6 +113,9 @@ class Future(Awaitable):
         self._exception = None
         self._callbacks = []
 
+    def __invert__(self):
+        return self._loop.run_until_complete(self)
+
     def cancel(self):
         if self.done():
             return False
@@ -205,3 +209,58 @@ def get_future(task_or_future):
         return task_or_future
     else:
         return task_or_future.future()
+
+
+class _GatheringFuture(Future):
+    def __init__(self, children, loop):
+        super(_GatheringFuture, self).__init__(loop)
+        self._children = children
+        self._n_done = 0
+
+        for child in self._children:
+            child.add_done_callback(self._child_done)
+
+    def cancel(self):
+        if self.done():
+            return False
+
+        ret = False
+        for child in self._children:
+            if child.cancel():
+                ret = True
+
+        return ret
+
+    def _child_done(self, future):
+        if self.done():
+            return
+
+        try:
+            if future.exception() is not None:
+                self.set_exception(future.exception())
+                return
+        except CancelledError as e:
+            self.set_exception(e)
+            return
+
+        self._n_done += 1
+        if self._n_done == len(self._children):
+            self._all_done()
+
+    def _all_done(self):
+        self.set_result([child.result() for child in self._children])
+
+
+def gather(awaitables, loop):
+    """
+    Gather multiple awaitables into a single :class:`Awaitable`
+    
+    :param awaitables: The awaitables to gather 
+    :param loop: The event loop
+    :return: An awaitable representing all the awaitables
+    :rtype: :class:`Awaitable`
+    """
+    if isinstance(awaitables, Awaitable):
+        return awaitables
+
+    return _GatheringFuture(awaitables, loop)

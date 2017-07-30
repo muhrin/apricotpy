@@ -2,6 +2,7 @@ import thread
 import time
 from abc import ABCMeta, abstractmethod
 from collections import deque
+import itertools
 import logging
 import heapq
 
@@ -247,8 +248,9 @@ class BaseEventLoop(AbstractEventLoop):
         :type awaitable: :class:`futures.Awaitable`
         :return: The result of the awaitable
         """
-        awaitable.add_done_callback(self._run_until_complete_cb)
-        self.run_forever()
+        if not awaitable.done():
+            awaitable.add_done_callback(self._run_until_complete_cb)
+            self.run_forever()
 
         return awaitable.result()
 
@@ -312,6 +314,7 @@ class BaseEventLoop(AbstractEventLoop):
             loop_object = object_type(self, *args, **kwargs)
         else:
             loop_object = self._object_factory(self, object_type, *args, **kwargs)
+        self._objects[loop_object.uuid] = loop_object
 
         self._event_loop.call_soon(self._insert, loop_object)
         return loop_object
@@ -321,6 +324,7 @@ class BaseEventLoop(AbstractEventLoop):
             loop_object = object_type(self, *args, **kwargs)
         else:
             loop_object = self._object_factory(self, object_type, *args, **kwargs)
+        self._objects[loop_object.uuid] = loop_object
 
         fut = self.create_future()
         self._event_loop.call_soon(self._insert, loop_object, fut)
@@ -361,7 +365,6 @@ class BaseEventLoop(AbstractEventLoop):
 
     def _insert(self, obj, fut=None):
         uuid = obj.uuid
-        self._objects[uuid] = obj
         obj.on_loop_inserted(self)
         if fut is not None:
             fut.set_result(obj)
@@ -380,3 +383,15 @@ class BaseEventLoop(AbstractEventLoop):
             self._objects.pop(uuid)
             fut.set_result(uuid)
             self.messages().send("loop.object.{}.removed".format(uuid))
+
+            # Cancel any callbacks to the object
+            for cb in itertools.chain(
+                    self._event_loop._ready,
+                    self._event_loop._scheduled):
+                try:
+                    if cb._fn.im_self is obj:
+                        cb.cancel()
+                        _LOGGER.info("Cancelled callback to '{}' because the loop "
+                                     "object was removed".format(cb._fn))
+                except AttributeError:
+                    pass

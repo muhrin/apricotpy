@@ -32,6 +32,6 @@ class TestEventLoop(unittest.TestCase):
     def test_create_remove(self):
         obj = self.loop.create(StringObj, 'mmmm...apricot pie')
         uuid = obj.uuid
-        result = self.loop.run_until_complete(self.loop.remove(obj))
+        result = ~self.loop.remove(obj)
 
         self.assertEqual(result, uuid)

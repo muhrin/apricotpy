@@ -18,7 +18,10 @@ __all__ = ['Persistable',
 
 _LOGGER = logging.getLogger(__name__)
 
-Bundle = dict
+
+# have to subclass to make this a legitemate type as this is used
+class Bundle(dict):
+    pass
 
 
 class Persistable(object):
@@ -27,7 +30,7 @@ class Persistable(object):
     """
     __metaclass__ = ABCMeta
 
-    CLASS_NAME = 'class_name'
+    CLASS_NAME = 'CLASS_NAME'
 
     @classmethod
     def create_from(cls, loop, saved_state, *args):
@@ -41,7 +44,7 @@ class Persistable(object):
         :return: An instance of this task with its state loaded from the save state.
         """
         # Get the class using the class loader and instantiate it
-        class_name = saved_state[cls.CLASS_NAME]
+        class_name = saved_state[Persistable.CLASS_NAME]
         my_name = utils.fullname(cls)
         if class_name != my_name:
             _LOGGER.warning(
@@ -184,12 +187,12 @@ class ContextMixin(object):
 
 
 class PersistableTask(
-    PersistableAwaitableMixin, PersistableLoopObjectMixin, tasks.Task):
+        PersistableAwaitableMixin, PersistableLoopObjectMixin, tasks.Task):
     __metaclass__ = ABCMeta
 
     AWAITING = 'AWAITING'
     AWAITING_RESULT = 'AWAITING_RESULT'
-    CALLBACK = 'CALLBACK'
+    NEXT_STEP = 'NEXT_STEP'
 
     def __init__(self, loop):
         super(PersistableTask, self).__init__(loop)
@@ -198,7 +201,8 @@ class PersistableTask(
     def save_instance_state(self, out_state):
         super(PersistableTask, self).save_instance_state(out_state)
 
-        out_state[self.CALLBACK] = self._callback
+        self._save_next_step(out_state)
+
         if self._awaiting is not None:
             awaiting = self.awaiting()
             try:
@@ -207,6 +211,7 @@ class PersistableTask(
                 out_state[self.AWAITING] = bundle
             except AttributeError:
                 raise RuntimeError("Awaitable is not persistable: '{}".format(awaiting.__class__))
+
         if self._awaiting_result is not tasks._NO_RESULT:
             out_state[self.AWAITING_RESULT] = self._awaiting_result
 
@@ -216,7 +221,7 @@ class PersistableTask(
         self.__saved_state = saved_state
 
         self._awaiting = None
-        self._callback = None
+        self._next_step = None
         self._awaiting_result = tasks._NO_RESULT
 
         self._paused = False
@@ -226,7 +231,9 @@ class PersistableTask(
         # Do this before calling super() so the superclass has the right state
 
         if self.__saved_state is not None:
-            self._callback = self.__saved_state[self.CALLBACK]
+
+            self._load_next_step(self.__saved_state[self.NEXT_STEP])
+
             try:
                 self._awaiting = load_from(loop, self.__saved_state[self.AWAITING])
             except KeyError:
@@ -239,6 +246,25 @@ class PersistableTask(
             self.__saved_state = None
 
         super(PersistableTask, self).on_loop_inserted(loop)
+
+    def _save_next_step(self, out_state):
+        if self._next_step is None:
+            out_state[self.NEXT_STEP] = None
+        else:
+            out_state[self.NEXT_STEP] = self._next_step.__name__
+
+    def _load_next_step(self, next_step_name):
+        if next_step_name is not None:
+            try:
+                self._set_next_step(getattr(self, next_step_name))
+            except AttributeError:
+                raise ValueError(
+                    "This Task does not have a function with "
+                    "the name '{}' as expected from the saved state".
+                        format(next_step_name)
+                )
+        else:
+            self._set_next_step(None)
 
 
 def persistable_object_factory(loop, obj_class, *args, **kwargs):

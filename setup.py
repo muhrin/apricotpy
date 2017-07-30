@@ -1,16 +1,25 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup
+# To use a consistent encoding
+from codecs import open
+from os import path
+
+here = path.abspath(path.dirname(__file__))
+
+# Get the long description from the README file
+with open(path.join(here, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
 
 __license__ = "MIT, see LICENSE file"
-__version__ = "0.1.0"
+__version__ = "0.1.0.dev1"
 __contributors__ = "Martin Uhrin"
 
 setup(
     name="apricotpy",
     version=__version__,
     description='A python event loop with persistence support',
-    long_description=open('README.md').read(),
+    long_description=long_description,
     url='https://github.com/muhrin/apricotpy',
     author='Martin Uhrin',
     author_email='Martin Uhrin <martin.uhrin@epfl.ch>',
@@ -32,6 +41,7 @@ setup(
     extras_require={
         ':python_version<"3.4"': ['enum34'],
         ':python_version<"3.2"': ['futures'],
+        ':python_version<"3.0"': ['future'],
     },
     packages=['apricotpy'],
     test_suite='test'

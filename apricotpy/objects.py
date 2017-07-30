@@ -98,6 +98,9 @@ class AwaitableMixin(futures.Awaitable):
         self._future = futures._FutureBase()
         self._callbacks = []
 
+    def __invert__(self):
+        return self._loop.run_until_complete(self)
+
     def on_loop_inserted(self, loop):
         super(AwaitableMixin, self).on_loop_inserted(loop)
         if self.done():
@@ -175,51 +178,3 @@ class AwaitableMixin(futures.Awaitable):
     def _check_inserted(self):
         assert self.loop() is not None, \
             "Awaitable has not been inserted into the loop yet"
-
-
-class _GatheringFuture(futures.Future):
-    def __init__(self, children, loop):
-        super(_GatheringFuture, self).__init__(loop)
-        self._children = children
-        self._n_done = 0
-
-        for child in self._children:
-            child.add_done_callback(self._child_done)
-
-    def cancel(self):
-        if self.done():
-            return False
-
-        ret = False
-        for child in self._children:
-            if child.cancel():
-                ret = True
-
-        return ret
-
-    def _child_done(self, future):
-        if self.done():
-            return
-
-        try:
-            if future.exception() is not None:
-                self.set_exception(future.exception())
-                return
-        except futures.CancelledError as e:
-            self.set_exception(e)
-            return
-
-        self._n_done += 1
-        if self._n_done == len(self._children):
-            self._all_done()
-
-    def _all_done(self):
-        self.set_result([child.result() for child in self._children])
-
-
-def gather(tasks_or_futures, loop):
-    if isinstance(tasks_or_futures, futures.Future):
-        return tasks_or_futures
-
-    futs = [futures.get_future(task_or_future) for task_or_future in tasks_or_futures]
-    return _GatheringFuture(futs, loop)

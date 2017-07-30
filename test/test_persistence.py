@@ -103,13 +103,12 @@ class PersistableAwaitableFive(apricotpy.PersistableAwaitableLoopObject):
 
 class TestPersistableAwaitable(TestCaseWithPersistenceLoop):
     def test_simple(self):
-        persistable_awaitable = self.loop.run_until_complete(self.loop.create_inserted(PersistableAwaitableFive))
+        persistable_awaitable = ~self.loop.create_inserted(PersistableAwaitableFive)
 
         saved_state = apricotpy.Bundle()
         persistable_awaitable.save_instance_state(saved_state)
 
         self.loop.run_until_complete(persistable_awaitable)
-        self.assertFalse(persistable_awaitable.in_loop())
 
         persistable_awaitable = self.loop.create(PersistableAwaitableFive, saved_state)
         self.loop.run_until_complete(persistable_awaitable)
@@ -124,7 +123,7 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
             def finish(self):
                 return 5
 
-        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask))
+        task = ~self.loop.create_inserted(PersistableTask)
 
         saved_state = apricotpy.Bundle()
         task.save_instance_state(saved_state)
@@ -146,7 +145,7 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
                 return value
 
         # Tick 0
-        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask))
+        task = ~self.loop.create_inserted(PersistableTask)
 
         saved_state = apricotpy.Bundle()
         task.save_instance_state(saved_state)
@@ -156,7 +155,7 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
         self.assertEqual(result, 5)
 
         # Tick 1
-        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask, saved_state))
+        task = ~self.loop.create_inserted(PersistableTask, saved_state)
         self.loop.tick()  # Awaiting
         awaiting = task.awaiting()
         self.assertIsNotNone(awaiting)
@@ -170,7 +169,7 @@ class TestPersistableTask(TestCaseWithPersistenceLoop):
         self.assertFalse(awaiting.in_loop())
 
         # Tick 2
-        task = self.loop.run_until_complete(self.loop.create_inserted(PersistableTask, saved_state))
+        task = ~self.loop.create_inserted(PersistableTask, saved_state)
         self.assertIsNotNone(task.awaiting())
         self.loop.run_until_complete(task.awaiting())
 
