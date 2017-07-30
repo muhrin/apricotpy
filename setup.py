@@ -22,7 +22,7 @@ setup(
     long_description=long_description,
     url='https://github.com/muhrin/apricotpy',
     author='Martin Uhrin',
-    author_email='Martin Uhrin <martin.uhrin@epfl.ch>',
+    author_email='martin.uhrin@gmail.com',
     license=__license__,
     classifiers=[
         'License :: OSI Approved :: MIT License',
