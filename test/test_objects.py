@@ -26,6 +26,27 @@ class TestLoopObject(utils.TestCaseWithLoop):
         for evt in ['created', 'inserting', 'inserted', 'removed']:
             self.assertIn('loop.object.{}.{}'.format(obj.uuid, evt), messages)
 
+    def test_send_message(self):
+        class Obj(apricotpy.LoopObject):
+            def on_loop_inserted(self, loop):
+                super(Obj, self).on_loop_inserted(loop)
+                self.send_message("greetings", "'sup yo")
+
+        messages = []
+
+        def got_message(loop, subject, body, sender):
+            messages.append((subject, body, sender))
+
+        self.loop.messages().add_listener(got_message, 'greetings')
+
+        obj = self.loop.create(Obj)
+        self.loop.run_until_complete(self.loop.remove(obj))
+
+        message = messages[0]
+        self.assertEqual(message[0], "greetings")
+        self.assertEqual(message[1], "'sup yo")
+        self.assertEqual(message[2], obj.uuid)
+
 
 class TestAwaitableLoopObject(utils.TestCaseWithLoop):
     def test_result(self):
