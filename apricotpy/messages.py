@@ -107,12 +107,14 @@ class Mailman(object):
                 total += len(entry.listeners)
             return total
 
-    def send(self, subject, body=None):
+    def send(self, subject, body=None, sender_id=None):
         """
         Send a message
         
         :param subject: The message subject 
         :param body: The body of the message
+        :param sender_id: An identifier for the sender, if LoopObject this will 
+            be the UUID.
         """
         # These loops need to use copies because, e.g., the recipient may
         # add or remove listeners during the delivery
@@ -121,12 +123,12 @@ class Mailman(object):
         for evt, entry in self._wildcard_listeners.items():
             if self._wildcard_match(evt, subject):
                 for l in list(entry.listeners):
-                    self._deliver_msg(l, subject, body)
+                    self._deliver_msg(l, subject, body, sender_id)
 
         # And now with the specific listeners
         try:
             for l in self._specific_listeners[subject].copy():
-                self._deliver_msg(l, subject, body)
+                self._deliver_msg(l, subject, body, sender_id)
         except KeyError:
             pass
 
@@ -136,8 +138,8 @@ class Mailman(object):
     def wildcard_listeners(self):
         return self._wildcard_listeners
 
-    def _deliver_msg(self, listener, event, body):
-        self.__loop.call_soon(listener, self.__loop, event, body)
+    def _deliver_msg(self, listener, event, body, sender_id):
+        self.__loop.call_soon(listener, self.__loop, event, body, sender_id)
 
     @staticmethod
     def _check_listener(listener):

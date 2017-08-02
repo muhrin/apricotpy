@@ -39,7 +39,7 @@ class TestEventLoop(unittest.TestCase):
     def test_create_message(self):
         result = {}
 
-        def created(loop, subject, body):
+        def created(loop, subject, body, sender_id):
             result['subject'] = subject
             result['body'] = body
 

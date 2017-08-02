@@ -56,6 +56,13 @@ class LoopObject(object):
     def remove(self):
         return self.loop().remove(self)
 
+    def send_message(self, subject, body=None):
+        """
+        Send a message from this object.  The UUID will automatically be used
+        as the sender id. 
+        """
+        self.loop().messages.send(subject, body, self.uuid)
+
 
 class TickingMixin(object):
     """

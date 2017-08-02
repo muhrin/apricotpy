@@ -2,8 +2,29 @@ import apricotpy
 from . import utils
 
 
+class DummyObject(apricotpy.LoopObject):
+    pass
+
+
 class AwaitableObject(apricotpy.AwaitableMixin, apricotpy.LoopObject):
     pass
+
+
+class TestLoopObject(utils.TestCaseWithLoop):
+    def test_messages(self):
+        messages = []
+
+        def got_message(loop, subject, body, sender):
+            messages.append(subject)
+
+        self.loop.messages().add_listener(got_message, "loop.object.*.*")
+
+        # Create and remove
+        obj = self.loop.create(DummyObject)
+        self.loop.run_until_complete(self.loop.remove(obj))
+
+        for evt in ['created', 'inserting', 'inserted', 'removed']:
+            self.assertIn('loop.object.{}.{}'.format(obj.uuid, evt), messages)
 
 
 class TestAwaitableLoopObject(utils.TestCaseWithLoop):

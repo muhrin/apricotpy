@@ -54,14 +54,6 @@ class AbstractEventLoop(object):
         pass
 
     @abstractmethod
-    def add_loop_listener(self, listener):
-        pass
-
-    @abstractmethod
-    def remove_loop_listener(self, listener):
-        pass
-
-    @abstractmethod
     def time(self):
         pass
 
@@ -248,6 +240,8 @@ class BaseEventLoop(AbstractEventLoop):
         :type awaitable: :class:`futures.Awaitable`
         :return: The result of the awaitable
         """
+        assert isinstance(awaitable, futures.Awaitable), "Must supply Awaitable object"
+
         if not awaitable.done():
             awaitable.add_done_callback(self._run_until_complete_cb)
             self.run_forever()
@@ -294,12 +288,6 @@ class BaseEventLoop(AbstractEventLoop):
         finally:
             self._thread_id = None
 
-    def add_loop_listener(self, listener):
-        self.__event_helper.add_listener(listener)
-
-    def remove_loop_listener(self, listener):
-        self.__event_helper.remove_listener(listener)
-
     def time(self):
         return time.time()
 
@@ -310,12 +298,15 @@ class BaseEventLoop(AbstractEventLoop):
     def create(self, object_type, *args, **kwargs):
         loop_object = self._create(object_type, *args, **kwargs)
 
-        self._event_loop.call_soon(self._insert, loop_object)
+        self.insert(loop_object)
         return loop_object
 
     def create_inserted(self, object_type, *args, **kwargs):
         loop_object = self._create(object_type, *args, **kwargs)
+        return self.insert(loop_object)
 
+    def insert(self, loop_object):
+        self.messages().send("loop.object.{}.inserting".format(loop_object.uuid), loop_object.uuid)
         fut = self.create_future()
         self._event_loop.call_soon(self._insert, loop_object, fut)
         return fut
@@ -346,7 +337,6 @@ class BaseEventLoop(AbstractEventLoop):
         self._thread_id = None
 
         self.__mailman = None
-        self.__event_helper = None
 
     def _tick(self):
         self._event_loop._tick()
