@@ -35,3 +35,17 @@ class TestEventLoop(unittest.TestCase):
         result = ~self.loop.remove(obj)
 
         self.assertEqual(result, uuid)
+
+    def test_create_message(self):
+        result = {}
+
+        def created(loop, subject, body):
+            result['subject'] = subject
+            result['body'] = body
+
+        self.loop.messages().add_listener(created, 'loop.object.*.created')
+        obj = self.loop.create(StringObj, 'created')
+        self.loop.run_until_complete(self.loop.remove(obj))
+
+        self.assertEqual(result['subject'], 'loop.object.{}.created'.format(obj.uuid))
+        self.assertEqual(result['body'], obj.uuid)

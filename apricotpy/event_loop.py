@@ -279,9 +279,7 @@ class BaseEventLoop(AbstractEventLoop):
         try:
             return self._objects[uuid]
         except KeyError:
-            pass
-
-        raise ValueError("Unknown uuid")
+            raise ValueError("Unknown uuid")
 
     def stop(self):
         """
@@ -310,27 +308,20 @@ class BaseEventLoop(AbstractEventLoop):
 
     # region Objects
     def create(self, object_type, *args, **kwargs):
-        if self._object_factory is None:
-            loop_object = object_type(self, *args, **kwargs)
-        else:
-            loop_object = self._object_factory(self, object_type, *args, **kwargs)
-        self._objects[loop_object.uuid] = loop_object
+        loop_object = self._create(object_type, *args, **kwargs)
 
         self._event_loop.call_soon(self._insert, loop_object)
         return loop_object
 
     def create_inserted(self, object_type, *args, **kwargs):
-        if self._object_factory is None:
-            loop_object = object_type(self, *args, **kwargs)
-        else:
-            loop_object = self._object_factory(self, object_type, *args, **kwargs)
-        self._objects[loop_object.uuid] = loop_object
+        loop_object = self._create(object_type, *args, **kwargs)
 
         fut = self.create_future()
         self._event_loop.call_soon(self._insert, loop_object, fut)
         return fut
 
     def remove(self, loop_object):
+        self.messages().send("loop.object.{}.removing".format(loop_object.uuid), loop_object.uuid)
         fut = self.create_future()
         self._event_loop.call_soon(self._remove, loop_object, fut)
         return fut
@@ -363,12 +354,24 @@ class BaseEventLoop(AbstractEventLoop):
     def _run_until_complete_cb(self, fut):
         self.stop()
 
+    def _create(self, object_type, *args, **kwargs):
+        if self._object_factory is None:
+            obj = object_type(self, *args, **kwargs)
+        else:
+            obj = self._object_factory(self, object_type, *args, **kwargs)
+
+        uuid = obj.uuid
+        self._objects[uuid] = obj
+        self.messages().send("loop.object.{}.created".format(uuid), uuid)
+
+        return obj
+
     def _insert(self, obj, fut=None):
         uuid = obj.uuid
         obj.on_loop_inserted(self)
         if fut is not None:
             fut.set_result(obj)
-        self.messages().send("loop.object.{}.inserted".format(uuid))
+        self.messages().send("loop.object.{}.inserted".format(uuid), uuid)
 
     def _remove(self, obj, fut):
         uuid = obj.uuid
@@ -380,14 +383,9 @@ class BaseEventLoop(AbstractEventLoop):
             fut.set_exception(e)
         else:
             obj.on_loop_removed()
-            self._objects.pop(uuid)
-            fut.set_result(uuid)
-            self.messages().send("loop.object.{}.removed".format(uuid))
 
             # Cancel any callbacks to the object
-            for cb in itertools.chain(
-                    self._event_loop._ready,
-                    self._event_loop._scheduled):
+            for cb in itertools.chain(self._event_loop._ready, self._event_loop._scheduled):
                 try:
                     if cb._fn.__self__ is obj:
                         cb.cancel()
@@ -395,3 +393,7 @@ class BaseEventLoop(AbstractEventLoop):
                                      "object was removed".format(cb._fn))
                 except AttributeError:
                     pass
+
+            self._objects.pop(uuid)
+            fut.set_result(uuid)
+            self.messages().send("loop.object.{}.removed".format(uuid), uuid)
