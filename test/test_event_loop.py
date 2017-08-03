@@ -4,11 +4,11 @@ import apricotpy
 
 class StringObj(apricotpy.LoopObject):
     @staticmethod
-    def create(loop, value):
-        return StringObj(loop, value)
+    def create(value):
+        return StringObj(value)
 
-    def __init__(self, loop, value):
-        super(StringObj, self).__init__(loop)
+    def __init__(self, value):
+        super(StringObj, self).__init__()
         self.value = value
 
 

@@ -5,19 +5,19 @@ import apricotpy
 
 class PersistableValue(apricotpy.PersistableLoopObject):
     @staticmethod
-    def create(loop, value):
-        return PersistableValue(loop, value)
+    def create(value):
+        return PersistableValue(value)
 
-    def __init__(self, loop, value):
-        super(PersistableValue, self).__init__(loop)
+    def __init__(self, value):
+        super(PersistableValue, self).__init__()
         self.value = value
 
     def save_instance_state(self, out_state):
         super(PersistableValue, self).save_instance_state(out_state)
         out_state['value'] = self.value
 
-    def load_instance_state(self, loop, saved_state, *args):
-        super(PersistableValue, self).load_instance_state(loop, saved_state, *args)
+    def load_instance_state(self, saved_state):
+        super(PersistableValue, self).load_instance_state(saved_state)
         self.value = saved_state['value']
 
 

@@ -10,14 +10,9 @@ __all__ = ['LoopObject',
 
 
 class LoopObject(object):
-    def __init__(self, loop, uuid=None):
+    def __init__(self):
         super(LoopObject, self).__init__()
-
-        if uuid is None:
-            self._uuid = uuid1()
-        else:
-            self._uuid = uuid
-
+        self._uuid = uuid1()
         self._loop = None
 
     @property

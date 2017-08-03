@@ -35,8 +35,8 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
 
     Terminated = namedtuple("Terminated", ['result'])
 
-    def __init__(self, loop):
-        super(Task, self).__init__(loop)
+    def __init__(self):
+        super(Task, self).__init__()
 
         self._awaiting = None
         self._next_step = None

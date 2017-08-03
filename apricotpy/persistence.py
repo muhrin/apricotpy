@@ -33,12 +33,10 @@ class Persistable(object):
     CLASS_NAME = 'CLASS_NAME'
 
     @classmethod
-    def create_from(cls, loop, saved_state, *args):
+    def create_from(cls, saved_state, *args, **kwargs):
         """
         Create an object from a saved instance state.
 
-        :param loop: The event loop
-        :type loop: :class:`apricotpy.AbstractEventLoop`
         :param saved_state: The saved state
         :type saved_state: :class:`Bundle`
         :return: An instance of this task with its state loaded from the save state.
@@ -51,23 +49,16 @@ class Persistable(object):
                 "Loading class from a bundle that was created from a class with a different "
                 "name.  This class is '{}', bundle created by '{}'".format(class_name, my_name))
 
-        task = cls.__new__(cls)
-        task.load_instance_state(loop, saved_state, *args)
-        return task
+        persistable = cls.__new__(cls)
+        persistable.load_instance_state(saved_state, *args, **kwargs)
+        return persistable
 
     def save_instance_state(self, out_state):
         out_state[self.CLASS_NAME] = utils.fullname(self)
 
     @abstractmethod
-    def load_instance_state(self, loop, saved_state, *args):
+    def load_instance_state(self, saved_state, *args, **kwargs):
         pass
-
-
-def load_from(loop, saved_state, *args):
-    # Get the class using the class loader and instantiate it
-    class_name = saved_state[Persistable.CLASS_NAME]
-    task_class = utils.load_class(class_name)
-    return loop.create(task_class, saved_state, *args)
 
 
 class PersistableLoopObjectMixin(Persistable):
@@ -86,8 +77,8 @@ class PersistableLoopObjectMixin(Persistable):
         super(PersistableLoopObjectMixin, self).save_instance_state(out_state)
         out_state[self.UUID] = self.uuid
 
-    def load_instance_state(self, loop, saved_state, *args):
-        super(PersistableLoopObjectMixin, self).load_instance_state(loop, saved_state, *args)
+    def load_instance_state(self, saved_state, *args, **kwargs):
+        super(PersistableLoopObjectMixin, self).load_instance_state(saved_state, *args, **kwargs)
         self._loop = None
         self._uuid = saved_state[self.UUID]
 
@@ -130,8 +121,8 @@ class PersistableAwaitableMixin(Persistable):
             except BaseException as e:
                 out_state[self.EXCEPTION] = e
 
-    def load_instance_state(self, loop, saved_state, *args):
-        super(PersistableAwaitableMixin, self).load_instance_state(loop, saved_state, *args)
+    def load_instance_state(self, saved_state, *args, **kwargs):
+        super(PersistableAwaitableMixin, self).load_instance_state(saved_state, *args, **kwargs)
         self._future = futures._FutureBase()
         self._callbacks = []
 
@@ -183,8 +174,8 @@ class ContextMixin(object):
         super(ContextMixin, self).save_instance_state(out_state)
         out_state[self.CONTEXT] = Bundle(self._context.__dict__)
 
-    def load_instance_state(self, loop, saved_state, *args):
-        super(ContextMixin, self).load_instance_state(loop, saved_state, *args)
+    def load_instance_state(self, saved_state, *args, **kwargs):
+        super(ContextMixin, self).load_instance_state(saved_state, *args, **kwargs)
         self._context = utils.SimpleNamespace(**saved_state[self.CONTEXT])
 
 
@@ -198,8 +189,8 @@ class PersistableTask(
     AWAITING_RESULT = 'AWAITING_RESULT'
     NEXT_STEP = 'NEXT_STEP'
 
-    def __init__(self, loop):
-        super(PersistableTask, self).__init__(loop)
+    def __init__(self):
+        super(PersistableTask, self).__init__()
         self.__saved_state = None
 
     def save_instance_state(self, out_state):
@@ -219,8 +210,8 @@ class PersistableTask(
         if self._awaiting_result is not tasks._NO_RESULT:
             out_state[self.AWAITING_RESULT] = self._awaiting_result
 
-    def load_instance_state(self, loop, saved_state, *args):
-        super(PersistableTask, self).load_instance_state(loop, saved_state, *args)
+    def load_instance_state(self, saved_state, *args, **kwargs):
+        super(PersistableTask, self).load_instance_state(saved_state, *args, **kwargs)
         # have to hold back the saved state until we're inserted
         self.__saved_state = saved_state
 
@@ -239,7 +230,7 @@ class PersistableTask(
             self._load_next_step(self.__saved_state[self.NEXT_STEP])
 
             try:
-                self._awaiting = load_from(loop, self.__saved_state[self.AWAITING])
+                self._awaiting = loop.create(self.__saved_state[self.AWAITING])
             except KeyError:
                 pass
             try:
@@ -271,18 +262,21 @@ class PersistableTask(
             self._set_next_step(None)
 
 
-def persistable_object_factory(loop, obj_class, *args, **kwargs):
+def persistable_object_factory(obj_class, *args, **kwargs):
     if isinstance(obj_class, Bundle):
         # User just passed in a Bundle and the bundle should contain the class
-        return load_from(loop, obj_class, *args)
+        # Get the class using the class loader and instantiate it
+        class_name = obj_class[Persistable.CLASS_NAME]
+        task_class = utils.load_class(class_name)
+        return persistable_object_factory(task_class, obj_class, *args)
     elif args and len(args) == 1 and isinstance(args[0], Bundle):
         if kwargs:
             RuntimeError("Found unexpected kwargs in call to process factory")
-        return obj_class.create_from(loop, args[0])
+        return obj_class.create_from(args[0])
     elif kwargs and 'saved_state' in kwargs:
-        return obj_class.create_from(loop, kwargs['saved_state'])
+        return obj_class.create_from(kwargs['saved_state'])
     else:
         try:
-            return obj_class(loop, *args, **kwargs)
+            return obj_class(*args, **kwargs)
         except TypeError as e:
             raise TypeError("Failed to create '{}', {}".format(obj_class, e.message))
