@@ -149,7 +149,9 @@ class PersistableAwaitableMixin(Persistable):
 
 
 class PersistableAwaitableLoopObject(
-    PersistableAwaitableMixin, objects.AwaitableMixin, PersistableLoopObject):
+    PersistableAwaitableMixin,  # Make the Awaitable persistable
+    objects.AwaitableMixin,  # Make the LoopObject awaitable
+    PersistableLoopObject):  # Start as a persistable LoopObject
     """
     A convenience class that gives a LoopObject that is both Persistable and
     Awaitable.
@@ -187,7 +189,9 @@ class ContextMixin(object):
 
 
 class PersistableTask(
-        PersistableAwaitableMixin, PersistableLoopObjectMixin, tasks.Task):
+    PersistableAwaitableMixin,  # make Awaitable also Persistable
+    PersistableLoopObjectMixin,  # make LoopObject also Persistable
+    tasks.Task):
     __metaclass__ = ABCMeta
 
     AWAITING = 'AWAITING'
