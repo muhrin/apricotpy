@@ -30,13 +30,13 @@ class Await(_TaskDirective):
 _NO_RESULT = ()
 
 
-class Task(objects.AwaitableMixin, objects.LoopObject):
+class TaskMixin(objects.AwaitableMixin):
     __metaclass__ = ABCMeta
 
     Terminated = namedtuple("Terminated", ['result'])
 
     def __init__(self):
-        super(Task, self).__init__()
+        super(TaskMixin, self).__init__()
 
         self._awaiting = None
         self._next_step = None
@@ -53,14 +53,12 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
         return self._awaiting
 
     def on_loop_inserted(self, loop):
-        super(Task, self).on_loop_inserted(loop)
-        if self._awaiting is not None:
-            self._awaiting.add_done_callback(self._await_done)
-        elif not self.done() and self.is_playing():
+        super(TaskMixin, self).on_loop_inserted(loop)
+        if not self.done() and self.is_playing():
             self._schedule_step()
 
     def on_loop_removed(self):
-        super(Task, self).on_loop_removed()
+        super(TaskMixin, self).on_loop_removed()
         if self._callback_handle is not None:
             self._callback_handle.cancel()
         if self._awaiting is not None:
@@ -74,7 +72,8 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
             return False
 
         self._paused = False
-        self._schedule_step()
+        if self._awaiting is None:
+            self._schedule_step()
 
         return True
 
@@ -101,7 +100,7 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
         return not self._paused
 
     def cancel(self):
-        cancelled = super(Task, self).cancel()
+        cancelled = super(TaskMixin, self).cancel()
         if cancelled and self.awaiting() is not None:
             self.awaiting().cancel()
             self._awaiting = None
@@ -172,3 +171,7 @@ class Task(objects.AwaitableMixin, objects.LoopObject):
         else:
             self._awaiting_result = awaitable.result()
             self._schedule_step()
+
+
+class Task(TaskMixin, objects.LoopObject):
+    pass

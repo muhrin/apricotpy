@@ -1,15 +1,8 @@
-import unittest
 import apricotpy
+from . import utils
 
 
-class TestFuture(unittest.TestCase):
-    def setUp(self):
-        self.loop = apricotpy.BaseEventLoop()
-
-    def tearDown(self):
-        self.loop.close()
-        self.loop = None
-
+class TestFuture(utils.TestCaseWithLoop):
     def test_create(self):
         self.loop.create_future()
 

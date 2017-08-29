@@ -4,7 +4,6 @@ import concurrent.futures
 __all__ = ['CancelledError',
            'Awaitable',
            'Future',
-           'get_future',
            'InvalidStateError',
            'gather']
 
@@ -204,51 +203,50 @@ class Future(Awaitable):
             self._loop.call_soon(callback, self)
 
 
-def get_future(task_or_future):
-    if isinstance(task_or_future, Future):
-        return task_or_future
-    else:
-        return task_or_future.future()
+def _create_fathering_future_type(future_type):
+    class _GatheringFutureTemplate(future_type):
+        def __init__(self, children, loop):
+            super(_GatheringFutureTemplate, self).__init__(loop)
+            self._children = children
+            self._n_done = 0
 
+            for child in self._children:
+                child.add_done_callback(self._child_done)
 
-class _GatheringFuture(Future):
-    def __init__(self, children, loop):
-        super(_GatheringFuture, self).__init__(loop)
-        self._children = children
-        self._n_done = 0
+        def cancel(self):
+            if self.done():
+                return False
 
-        for child in self._children:
-            child.add_done_callback(self._child_done)
+            ret = False
+            for child in self._children:
+                if child.cancel():
+                    ret = True
 
-    def cancel(self):
-        if self.done():
-            return False
+            return ret
 
-        ret = False
-        for child in self._children:
-            if child.cancel():
-                ret = True
-
-        return ret
-
-    def _child_done(self, future):
-        if self.done():
-            return
-
-        try:
-            if future.exception() is not None:
-                self.set_exception(future.exception())
+        def _child_done(self, future):
+            if self.done():
                 return
-        except CancelledError as e:
-            self.set_exception(e)
-            return
 
-        self._n_done += 1
-        if self._n_done == len(self._children):
-            self._all_done()
+            try:
+                if future.exception() is not None:
+                    self.set_exception(future.exception())
+                    return
+            except CancelledError as e:
+                self.set_exception(e)
+                return
 
-    def _all_done(self):
-        self.set_result([child.result() for child in self._children])
+            self._n_done += 1
+            if self._n_done == len(self._children):
+                self._all_done()
+
+        def _all_done(self):
+            self.set_result([child.result() for child in self._children])
+
+    return _GatheringFutureTemplate
+
+
+_GatheringFuture = _create_fathering_future_type(Future)
 
 
 def gather(awaitables, loop):

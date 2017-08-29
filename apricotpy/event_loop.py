@@ -146,16 +146,16 @@ class AbstractEventLoop(object):
         pass
 
 
-class _EventLoop(object):
-    def __init__(self, engine):
-        self._engine = engine
+class _CallbackLoop(object):
+    def __init__(self, event_loop):
+        self._event_loop = event_loop
         self._ready = deque()
         self._scheduled = []
         self._closed = False
 
     def _tick(self):
         # Handle scheduled callbacks that are ready
-        end_time = self._engine.time() + self._engine.clock_resolution
+        end_time = self._event_loop.time() + self._event_loop.clock_resolution
         while self._scheduled:
             handle = self._scheduled[0]
             if handle._when >= end_time:
@@ -179,7 +179,7 @@ class _EventLoop(object):
         return handle
 
     def call_later(self, delay, fn, *args):
-        return self.call_at(self._engine.time() + delay, fn, *args)
+        return self.call_at(self._event_loop.time() + delay, fn, *args)
 
     def call_at(self, when, fn, *args):
         timer = events.TimerHandle(when, fn, args, self)
@@ -196,9 +196,14 @@ class _EventLoop(object):
 
 
 class BaseEventLoop(AbstractEventLoop):
-    def __init__(self):
+    def __init__(self, callback_loop=None):
+        super(BaseEventLoop, self).__init__()
+
         self._stopping = False
-        self._event_loop = _EventLoop(self)
+        if callback_loop is None:
+            self._callback_loop = _CallbackLoop(self)
+        else:
+            self._callback_loop = callback_loop
 
         self._objects = {}
         self._object_factory = None
@@ -257,10 +262,10 @@ class BaseEventLoop(AbstractEventLoop):
         :return: A callback handle
         :rtype: :class:`events.Handle`
         """
-        return self._event_loop.call_soon(fn, *args)
+        return self._callback_loop.call_soon(fn, *args)
 
     def call_later(self, delay, fn, *args):
-        return self._event_loop.call_later(delay, fn, *args)
+        return self._callback_loop.call_later(delay, fn, *args)
 
     def objects(self, obj_type=None):
         # Filter the type if necessary
@@ -307,15 +312,11 @@ class BaseEventLoop(AbstractEventLoop):
 
     def insert(self, loop_object):
         self.messages().send("loop.object.{}.inserting".format(loop_object.uuid), loop_object.uuid)
-        fut = self.create_future()
-        self._event_loop.call_soon(self._insert, loop_object, fut)
-        return fut
+        return loop_object.insert_into(self)
 
     def remove(self, loop_object):
         self.messages().send("loop.object.{}.removing".format(loop_object.uuid), loop_object.uuid)
-        fut = self.create_future()
-        self._event_loop.call_soon(self._remove, loop_object, fut)
-        return fut
+        return loop_object.remove(self)
 
     def set_object_factory(self, factory):
         self._object_factory = factory
@@ -329,7 +330,7 @@ class BaseEventLoop(AbstractEventLoop):
         assert not self.is_running(), "Can't close a running loop"
 
         self._stopping = False
-        self._event_loop._close()
+        self._callback_loop._close()
 
         self._objects = None
         self._object_factory = None
@@ -339,7 +340,7 @@ class BaseEventLoop(AbstractEventLoop):
         self.__mailman = None
 
     def _tick(self):
-        self._event_loop._tick()
+        self._callback_loop._tick()
 
     def _run_until_complete_cb(self, fut):
         self.stop()
@@ -348,16 +349,17 @@ class BaseEventLoop(AbstractEventLoop):
         if self._object_factory is None:
             obj = object_type(*args, **kwargs)
         else:
-            obj = self._object_factory(object_type, *args, **kwargs)
+            obj = self._object_factory(self, object_type, *args, **kwargs)
 
         uuid = obj.uuid
-        self._objects[uuid] = obj
+        # self._objects[uuid] = obj
         self.messages().send("loop.object.{}.created".format(uuid), uuid)
 
         return obj
 
     def _insert(self, obj, fut=None):
         uuid = obj.uuid
+        self._objects[uuid] = obj
         obj.on_loop_inserted(self)
         if fut is not None:
             fut.set_result(obj)
@@ -375,7 +377,7 @@ class BaseEventLoop(AbstractEventLoop):
             obj.on_loop_removed()
 
             # Cancel any callbacks to the object
-            for cb in itertools.chain(self._event_loop._ready, self._event_loop._scheduled):
+            for cb in itertools.chain(self._callback_loop._ready, self._callback_loop._scheduled):
                 try:
                     if cb._fn.__self__ is obj:
                         cb.cancel()
@@ -387,3 +389,9 @@ class BaseEventLoop(AbstractEventLoop):
             self._objects.pop(uuid)
             fut.set_result(uuid)
             self.messages().send("loop.object.{}.removed".format(uuid), uuid)
+
+    def _create_handle(self, fn, args):
+        return events.Handle(fn, args, self)
+
+    def _create_timer_handle(self, when, fn, args):
+        return events.TimerHandle(when, fn, args, self)

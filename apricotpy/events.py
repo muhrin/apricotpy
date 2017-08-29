@@ -61,6 +61,8 @@ def _format_callback_source(func, args):
 
 class Handle(object):
     def __init__(self, fn, args, loop):
+        assert fn is not None
+
         self._loop = loop
         self._fn = fn
         self._args = args

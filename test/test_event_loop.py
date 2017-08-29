@@ -4,7 +4,7 @@ import apricotpy
 
 class StringObj(apricotpy.LoopObject):
     @staticmethod
-    def create(value):
+    def create(loop, value):
         return StringObj(value)
 
     def __init__(self, value):

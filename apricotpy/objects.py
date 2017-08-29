@@ -1,5 +1,5 @@
 import abc
-from uuid import uuid1
+import uuid
 
 from . import futures
 
@@ -12,8 +12,10 @@ __all__ = ['LoopObject',
 class LoopObject(object):
     def __init__(self):
         super(LoopObject, self).__init__()
-        self._uuid = uuid1()
+
+        self._uuid = uuid.uuid4()
         self._loop = None
+        self._loop_callback = None
 
     @property
     def uuid(self):
@@ -48,8 +50,21 @@ class LoopObject(object):
     def in_loop(self):
         return self._loop is not None
 
-    def remove(self):
-        return self.loop().remove(self)
+    def insert_into(self, loop):
+        """ Schedule the insertion of the object into an event loop"""
+        fut = loop.create_future()
+        self._loop_callback = loop.call_soon(loop._insert, self, fut)
+        return fut
+
+    def remove(self, loop=None):
+        """ Schedule the removal of the object from an event loop """
+        if loop is None:
+            assert self._loop is not None, "No loop supplied and the object is not in a loop"
+            loop = self._loop
+
+        fut = loop.create_future()
+        self._loop_callback = loop.call_soon(loop._remove, self, fut)
+        return fut
 
     def send_message(self, subject, body=None):
         """
