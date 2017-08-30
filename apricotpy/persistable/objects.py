@@ -25,21 +25,20 @@ class PersistableLoopObjectMixin(core.Persistable):
 
     def save_instance_state(self, out_state):
         super(PersistableLoopObjectMixin, self).save_instance_state(out_state)
+
+        out_state.set_loop(self._loop)
         out_state[self.UUID] = self.uuid
-        out_state[self.IN_LOOP] = self.in_loop()
         out_state[self.LOOP_CALLBACK] = self._loop_callback
 
     def load_instance_state(self, saved_state, loop):
         super(PersistableLoopObjectMixin, self).load_instance_state(saved_state, loop)
 
+        self._loop = saved_state.loop()
         self._uuid = saved_state[self.UUID]
-        if saved_state[self.IN_LOOP]:
-            assert loop is not None, "Cannot create this loop object without an event loop"
-            self._loop = loop
-            self._loop._insert_object(self)
-        else:
-            self._loop = None
         self._loop_callback = saved_state[self.LOOP_CALLBACK]
+
+        if loop is not None:
+            self._loop._insert_object(self)
 
 
 class LoopObject(apricotpy.LoopObject, PersistableLoopObjectMixin):

@@ -39,11 +39,8 @@ class CallbackDelegate(Persistable):
 
     def __init__(self, fn):
 
-        if inspect.isfunction(fn):
-            self._loop = None
-        elif inspect.ismethod(fn) and isinstance(fn.__self__, Persistable):
-            self._loop = fn.__self__.loop()
-        else:
+        if not inspect.isfunction(fn) and \
+                not (inspect.ismethod(fn) and isinstance(fn.__self__, Persistable)):
             raise ValueError(
                 "Callback must be a plain function or method of a persistable, got '{}'".format(fn)
             )
@@ -53,9 +50,6 @@ class CallbackDelegate(Persistable):
     @property
     def fn(self):
         return self._fn
-
-    def loop(self):
-        return self._loop
 
     def save_instance_state(self, out_state):
         super(CallbackDelegate, self).save_instance_state(out_state)
@@ -70,13 +64,18 @@ class CallbackDelegate(Persistable):
     def load_instance_state(self, saved_state, loop):
         super(CallbackDelegate, self).load_instance_state(saved_state, loop)
 
-        self._loop = loop
         try:
             obj = saved_state[self.OBJ]
             self._fn = getattr(obj, saved_state[self.FUNC_NAME])
         except KeyError:
             # Must be a plain function
             self._fn = utils.load_object(saved_state[self.FUNC_NAME])
+
+
+_TYPE = '_TYPE'
+_TYPE_CALLBACK = 'CALLBACK'
+_CALLBACK_FN_NAME = 'CALLBACK_FN_NAME'
+_CALLBACK_OBJ_ID = 'CALLBACK_OBJ_ID'
 
 
 class Bundle(dict):
@@ -86,7 +85,6 @@ class Bundle(dict):
     When instantiating it will ask the persistable to save its instance state
     which will trigger any child persistables to also be saved.
     """
-
     def __init__(self, persistable, bundles=None):
         super(Bundle, self).__init__()
         self._class_name = utils.fullname(persistable)
@@ -100,6 +98,7 @@ class Bundle(dict):
         if bundles is None:
             # We're the 'root' bundle (i.e. the first to be Bundled)
             self._bundles = {}
+            # 'Bootstrap' by inserting the root loop as empty
             if self._loop_id is not None:
                 self._bundles[self._loop_id] = None
         else:
@@ -134,9 +133,9 @@ class Bundle(dict):
     def loop_id(self):
         return self._loop_id
 
-    def ensure_bundle(self, persistable):
-        if id(persistable) not in self._bundles:
-            self._bundles[id(persistable)] = Bundle(persistable, self._bundles)
+    def set_loop(self, loop):
+        if loop is not None:
+            self._loop_id = id(loop)
 
     def unbundle(self, loop):
         """
@@ -150,19 +149,36 @@ class Bundle(dict):
         return Unbundler(self, loop).do()
 
     def _transform(self, value):
-        # For a function/method create a persistable saved state
-        if inspect.isfunction(value) or inspect.ismethod(value):
-            value = CallbackDelegate(fn=value)
-
         if isinstance(value, Persistable):
-            self.ensure_bundle(value)
+            self._ensure_bundle(value)
             value = Reference(value)
         elif isinstance(value, (list, tuple)):
             value = [self._transform(item) for item in value]
         elif isinstance(value, collections.Mapping):
             value = {k: self._transform(item) for k, item in value.iteritems()}
+        elif inspect.isfunction(value) or inspect.ismethod(value):
+            value = self._save_callback(fn=value)
 
         return value
+
+    def _ensure_bundle(self, persistable):
+        if id(persistable) not in self._bundles:
+            self._bundles[id(persistable)] = Bundle(persistable, self._bundles)
+
+    def _save_callback(self, fn):
+        out_state = {'_TYPE': _TYPE_CALLBACK}
+        if inspect.isfunction(fn):
+            out_state[_CALLBACK_FN_NAME] = utils.fullname(fn)
+        elif inspect.ismethod(fn) and isinstance(fn.__self__, Persistable):
+            out_state[_CALLBACK_OBJ_ID] = id(fn.__self__)
+            out_state[_CALLBACK_FN_NAME] = fn.__name__
+        else:
+            raise ValueError(
+                "Must supply a function or persistable object method. "
+                "Got '{}'".format(fn)
+            )
+
+        return out_state
 
 
 class Unbundler(object):
@@ -176,14 +192,15 @@ class Unbundler(object):
         self._unbundled = None
 
         if persistables is None:
+            # We're the root that is being unbundled
             self._persistables = {}
-            if bundle.loop_id is not None:
-                self._persistables[bundle.loop_id] = loop
+            if self._bundle.loop_id is not None:
+                self._persistables[self._bundle.loop_id] = loop
         else:
             self._persistables = persistables
-            id = bundle.id
-            if id in self._persistables:
-                self._unbundled = self._persistables[id]
+            ref_id = bundle.id
+            if ref_id in self._persistables:
+                self._unbundled = self._persistables[ref_id]
 
     def do(self):
         if self._unbundled is None:
@@ -211,13 +228,20 @@ class Unbundler(object):
     def __getitem__(self, item):
         return self._transform(self._bundle[item])
 
+    def loop(self):
+        return self._get_loop(self._bundle.loop_id)
+
     def _transform(self, value):
         if isinstance(value, Reference):
             value = self._get_persistable(value.id)
         elif isinstance(value, (list, tuple)):
             value = [self._transform(item) for item in value]
         elif isinstance(value, collections.Mapping):
-            value = {k: self._transform(item) for k, item in value.iteritems()}
+            if _TYPE in value and value[_TYPE] == _TYPE_CALLBACK:
+                value = self._load_callback(value)
+            else:
+                # Just a plain mapping
+                value = {k: self._transform(item) for k, item in value.iteritems()}
 
         return value
 
@@ -238,3 +262,11 @@ class Unbundler(object):
             return self._get_persistable(loop_id)
         else:
             return None
+
+    def _load_callback(self, saved_state):
+        obj_id = saved_state.get(_CALLBACK_OBJ_ID, None)
+        if obj_id is not None:
+            obj = self._get_persistable(obj_id)
+            return getattr(obj, saved_state[_CALLBACK_FN_NAME])
+        else:
+            return utils.load_object(saved_state[_CALLBACK_FN_NAME])
