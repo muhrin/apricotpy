@@ -32,19 +32,8 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
     RAN = -1
 
     def __init__(self, fn, args, loop):
-        # fn = ensure_persistable_callback(fn)
         super(Handle, self).__init__(fn, args, loop)
         self._when = None
-
-    def save_instance_state(self, out_state):
-        super(Handle, self).save_instance_state(out_state)
-        out_state[self.WHEN] = self._when
-
-    def load_instance_state(self, saved_state, loop):
-        super(Handle, self).load_instance_state(saved_state, loop)
-        self._when = saved_state[self.WHEN]
-        if self._when != self.RAN:
-            self._loop._insert_callback(self)
 
     def __hash__(self):
         return hash(self._when)
@@ -79,6 +68,16 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
 
     def loop(self):
         return self._loop
+
+    def save_instance_state(self, out_state):
+        super(Handle, self).save_instance_state(out_state)
+        out_state[self.WHEN] = self._when
+
+    def load_instance_state(self, saved_state, loop):
+        super(Handle, self).load_instance_state(saved_state, loop)
+        self._when = saved_state[self.WHEN]
+        if self._when != self.RAN:
+            self._loop._insert_callback(self)
 
     def _run(self):
         super(Handle, self)._run()

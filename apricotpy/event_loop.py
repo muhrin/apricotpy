@@ -42,10 +42,24 @@ class AbstractEventLoop(object):
     @abstractmethod
     def call_later(self, delay, callback, *args):
         """
-        Schedule `callback` to be called after the given `delay` in seconds.
+        Schedule callback to be called after the given `delay` in seconds.
          
         :param delay: The callback delay
         :type delay: float
+        :param callback: The callback to call
+        :param args: The callback arguments
+        :return: A callback handle
+        :rtype: :class:`events.Handle`
+        """
+        pass
+
+    @abstractmethod
+    def call_at(self, when, callback, *args):
+        """
+        Schedule a callback to to be called at a given time
+
+        :param when: The time when to call
+        :type when: float
         :param callback: The callback to call
         :param args: The callback arguments
         :return: A callback handle
@@ -266,6 +280,9 @@ class BaseEventLoop(AbstractEventLoop):
 
     def call_later(self, delay, fn, *args):
         return self._callback_loop.call_later(delay, fn, *args)
+
+    def call_at(self, when, callback, *args):
+        return self._callback_loop.call_at(when, callback, *args)
 
     def objects(self, obj_type=None):
         # Filter the type if necessary

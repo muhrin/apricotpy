@@ -85,27 +85,6 @@ class BaseEventLoop(apricotpy.BaseEventLoop, objects.LoopObject):
 
         raise ValueError("Unknown object UUID '{}'".format(uuid))
 
-    def get_callback_handle(self, uuid):
-        for handle in itertools.chain(self._callback_loop._ready, self._callback_loop._scheduled):
-            if handle.uuid == uuid:
-                return handle
-
-        raise ValueError("Unknown callback UUID '{}'".format(uuid))
-
-    def get(self, uuid):
-        try:
-            return self.get_object(uuid)
-        except ValueError:
-            pass
-
-        try:
-            return self.get_callback_handle(uuid)
-        except ValueError:
-            pass
-
-        # Out of options
-        raise ValueError("Unknown UUID '{}'".format(uuid))
-
     def save_instance_state(self, out_state):
         super(BaseEventLoop, self).save_instance_state(out_state)
 
