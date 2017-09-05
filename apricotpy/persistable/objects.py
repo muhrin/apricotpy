@@ -26,7 +26,6 @@ class PersistableLoopObjectMixin(core.Persistable):
     def save_instance_state(self, out_state):
         super(PersistableLoopObjectMixin, self).save_instance_state(out_state)
 
-        out_state.set_loop(self._loop)
         out_state[self.UUID] = self.uuid
         out_state[self.LOOP_CALLBACK] = self._loop_callback
 

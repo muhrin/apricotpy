@@ -19,14 +19,14 @@ class Future(apricotpy.Future, core.Persistable):
         out_state[self.STATE] = self._state
         out_state[self.RESULT] = self._result
         out_state[self.EXCEPTION] = self._exception
-        out_state[self.CALLBACKS] = self._callbacks
+        out_state[self.CALLBACKS] = tuple(self._callbacks)
 
     def load_instance_state(self, saved_state, loop):
         self._loop = loop
         self._state = saved_state[self.STATE]
         self._result = saved_state[self.RESULT]
         self._exception = saved_state[self.EXCEPTION]
-        self._callbacks = saved_state[self.CALLBACKS]
+        self._callbacks = list(saved_state[self.CALLBACKS])
 
 
 _GatheringFuture = apricotpy.futures._create_fathering_future_type(Future)

@@ -25,7 +25,7 @@ class MakeAwaitableMixinPersistable(object):
         out_state[self.STATE] = self._future._state
         out_state[self.RESULT] = self._future._result
         out_state[self.EXCEPTION] = self._future._exception
-        out_state[self.CALLBACKS] = self._callbacks
+        out_state[self.CALLBACKS] = tuple(self._callbacks)
 
     def load_instance_state(self, saved_state, loop):
         super(MakeAwaitableMixinPersistable, self).load_instance_state(saved_state, loop)
@@ -36,7 +36,7 @@ class MakeAwaitableMixinPersistable(object):
         fut._exception = saved_state[self.EXCEPTION]
         self._future = fut
 
-        self._callbacks = saved_state[self.CALLBACKS]
+        self._callbacks = list(saved_state[self.CALLBACKS])
 
 
 class AwaitableMixin(MakeAwaitableMixinPersistable, apricotpy.AwaitableMixin):

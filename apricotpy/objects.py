@@ -116,6 +116,7 @@ class AwaitableMixin(futures.Awaitable):
         self._callbacks = []
 
     def __invert__(self):
+        self._check_inserted()
         return self._loop.run_until_complete(self)
 
     def on_loop_inserted(self, loop):

@@ -13,7 +13,6 @@ class _PersistableHandleMixin(core.Persistable):
     def save_instance_state(self, out_state):
         super(_PersistableHandleMixin, self).save_instance_state(out_state)
 
-        out_state.set_loop(self._loop)
         out_state[self.FN] = self._fn
         out_state[self.ARGS] = self._args
         out_state[self.CANCELLED] = self._cancelled

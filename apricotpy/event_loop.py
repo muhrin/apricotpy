@@ -226,6 +226,12 @@ class BaseEventLoop(AbstractEventLoop):
 
         self.__mailman = messages.Mailman(self)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     @property
     def clock_resolution(self):
         return 0.1

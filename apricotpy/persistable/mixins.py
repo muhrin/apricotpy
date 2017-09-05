@@ -28,8 +28,8 @@ class ContextMixin(object):
 
     def save_instance_state(self, out_state):
         super(ContextMixin, self).save_instance_state(out_state)
-        out_state[self.CONTEXT] = self._context
+        out_state[self.CONTEXT] = self._context.__dict__
 
     def load_instance_state(self, saved_state, loop):
         super(ContextMixin, self).load_instance_state(saved_state, loop)
-        self._context = saved_state[self.CONTEXT]
+        self._context = apricotpy.utils.SimpleNamespace(**saved_state[self.CONTEXT])
