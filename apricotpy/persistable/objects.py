@@ -9,9 +9,9 @@ __all__ = ['LoopObject']
 _LOGGER = logging.getLogger(__name__)
 
 
-class PersistableLoopObjectMixin(core.Persistable):
+class PersistableLoopObjectMixin(core.LoopPersistable):
     """
-    A mixin that makes a :class:`objects.LoopObject` :class:`Persistable`.
+    A mixin that makes a :class:`objects.LoopObject` :class:`LoopPersistable`.
 
     Because this is a mixin in can be inserted an any point in the inheritance hierarchy.
     """
@@ -42,7 +42,7 @@ class PersistableLoopObjectMixin(core.Persistable):
 
 class LoopObject(apricotpy.LoopObject, PersistableLoopObjectMixin):
     """
-    A convenience to get a LoopObject that is Persistable.  
+    A convenience to get a LoopObject that is LoopPersistable.  
     
     The user should overwrite `save/load_instance_state()` appropriately,
     remembering to call `super()`

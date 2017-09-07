@@ -14,8 +14,8 @@ def futures_equal(f1, f2):
     if f1._exception != f2._exception:
         return False
 
-    if f1._callbacks != f2._callbacks:
-        return False
+    # if f1._callbacks != f2._callbacks:
+    #     return False
 
     return True
 

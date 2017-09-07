@@ -11,7 +11,7 @@ __all__ = ['Task']
 
 
 class Task(
-    awaitable.MakeAwaitableMixinPersistable,  # make Awaitable also Persistable
+    awaitable.MakeAwaitableMixinPersistable,  # make Awaitable also LoopPersistable
     apricotpy.tasks.TaskMixin,
     objects.LoopObject):
     __metaclass__ = ABCMeta

@@ -7,7 +7,7 @@ __all__ = ['AwaitableLoopObject']
 
 class MakeAwaitableMixinPersistable(object):
     """
-    Take a :class:`apricotpy.AwaitableMixin` and make it :class:`core.Persistable` 
+    Take a :class:`apricotpy.AwaitableMixin` and make it :class:`core.LoopPersistable` 
     """
 
     STATE = 'STATE'
@@ -47,7 +47,7 @@ class AwaitableLoopObject(
     AwaitableMixin,
     objects.LoopObject):  # Start as a persistable LoopObject
     """
-    A convenience class that gives a LoopObject that is both Persistable and
+    A convenience class that gives a LoopObject that is both LoopPersistable and
     Awaitable.
     
     The user should overwrite `save/load_instance_state()` appropriately,

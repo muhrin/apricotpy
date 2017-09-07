@@ -5,7 +5,7 @@ from . import core
 _LOGGER = logging.getLogger(__name__)
 
 
-class _PersistableHandleMixin(core.Persistable):
+class _PersistableHandleMixin(core.LoopPersistable):
     FN = 'FN'
     ARGS = 'ARGS'
     CANCELLED = 'CANCELLED'
@@ -18,6 +18,7 @@ class _PersistableHandleMixin(core.Persistable):
         out_state[self.CANCELLED] = self._cancelled
 
     def load_instance_state(self, saved_state, loop):
+
         super(_PersistableHandleMixin, self).load_instance_state(saved_state, loop)
 
         self._loop = saved_state.loop()

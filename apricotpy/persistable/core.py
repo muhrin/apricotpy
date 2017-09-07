@@ -4,12 +4,12 @@ import logging
 import uuid
 from . import utils
 
-__all__ = ['Bundle', 'Unbundler']
+__all__ = ['LoopPersistable', 'Bundle', 'Unbundler']
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Persistable(object):
+class LoopPersistable(object):
     """
     An abstract class that defines objects that are persistable.
     """
@@ -39,108 +39,17 @@ class Custom(object):
         self.value = value
 
 
-class PersistablePersister(object):
-    @staticmethod
-    def encode(persistable, bundler):
-        if not isinstance(persistable, Persistable):
-            raise TypeError
-
-        bundler._ensure_bundle(persistable)
-        return Reference(persistable)
-
-    @staticmethod
-    def decode(reference, unbundler):
-        if not isinstance(reference, Reference):
-            raise TypeError
-
-        return unbundler.get_persistable(reference)
-
-
-class ListPersister(object):
-    @staticmethod
-    def encode(list_, bundler):
-        if not isinstance(list_, tuple):
-            raise TypeError
-
-        return tuple(bundler.encode(item) for item in list_)
-
-    @staticmethod
-    def decode(list_, unbundler):
-        if not isinstance(list_, tuple):
-            raise TypeError
-
-        return tuple(unbundler.decode(item) for item in list_)
-
-
-class DictPersister(object):
-    @staticmethod
-    def encode(dict_, bundler):
-        if not isinstance(dict_, dict):
-            raise TypeError
-
-        return {k: bundler.encode(item) for k, item in dict_.iteritems()}
-
-    @staticmethod
-    def decode(dict_, unbundler):
-        if not isinstance(dict_, dict):
-            raise TypeError
-
-        return {k: unbundler.decode(item) for k, item in dict_.iteritems()}
-
-
-class CallbackPersister(object):
-    TYPE_ID = '88356b3e-4596-46b2-a223-c3a78d20cdb2'
-
-    @classmethod
-    def encode(cls, fn, bundler):
-        if inspect.isfunction(fn):
-            encoded = utils.fullname(fn)
-        elif inspect.ismethod(fn) and isinstance(fn.__self__, Persistable):
-            encoded = (Reference(fn.__self__), fn.__name__)
-        else:
-            raise TypeError(
-                "Must supply a function or persistable object method. "
-                "Got '{}'".format(fn)
-            )
-
-        return Custom(cls.TYPE_ID, encoded)
-
-    @classmethod
-    def decode(cls, encoded, unbundler):
-        if not (isinstance(encoded, Custom) and encoded.type_id == cls.TYPE_ID):
-            raise ValueError("Not a callback type")
-
-        try:
-            # Maybe it's a method in which case the value is a tuple
-            obj = unbundler.get_persistable(encoded.value[0])
-            return getattr(obj, encoded.value[1])
-        except TypeError:
-            # It should be a function name then
-            return utils.load_object(encoded.value)
-
-
-_TYPE = '_TYPE'
-_TYPE_CALLBACK = 'CALLBACK'
-_CALLBACK_FN_NAME = 'CALLBACK_FN_NAME'
-_CALLBACK_OBJ_ID = 'CALLBACK_OBJ_ID'
-
-
 class Bundle(dict):
     """
-    This object represents the persisted state of a :class:`Persistable` object.
+    This object represents the persisted state of a :class:`LoopPersistable` object.
     
     When instantiating it will ask the persistable to save its instance state
     which will trigger any child persistables to also be saved.
     """
 
-    ENCODERS = (PersistablePersister.encode,
-                ListPersister.encode,
-                DictPersister.encode,
-                CallbackPersister.encode)
-
     def __init__(self, persistable, bundles=None):
         super(Bundle, self).__init__()
-        self._class_name = utils.fullname(persistable)
+        self._class_name = utils.class_name(persistable)
         self._id = id(persistable)
 
         if persistable.loop() is None:
@@ -200,41 +109,41 @@ class Bundle(dict):
         return Unbundler(self, loop).do()
 
     def encode(self, value):
-        for encode in self.ENCODERS:
-            try:
-                value = encode(value, self)
-                break
-            except (TypeError, ValueError):
-                pass
+        if isinstance(value, LoopPersistable):
+            self._ensure_bundle(value)
+            return Reference(value)
 
-        self._check_value(value)
-        return value
+        if utils.is_sequence_not_str(value):
+            if isinstance(value, tuple):
+                return tuple(self.encode(item) for item in value)
+            else:
+                raise ValueError("Unsupported sequence type ({}), use a tuple".format(type(value)))
+
+        if isinstance(value, dict):
+            return {k: self.encode(item) for k, item in value.iteritems()}
+
+        if inspect.isfunction(value) or inspect.ismethod(value):
+            from .persistables import Function
+
+            fn_obj = Function(value)
+            self._ensure_bundle(fn_obj)
+            return Reference(fn_obj)
+
+        if isinstance(value, (int, float, str, unicode, uuid.UUID)):
+            return value
+
+        if isinstance(value, BaseException):
+            # TODO: Don't store exceptions directly!
+            return value
+
+        if value is None:
+            return value
+
+        raise ValueError("Unsupported value type '{}'".format(value))
 
     def _ensure_bundle(self, persistable):
         if id(persistable) not in self._bundles:
             self._bundles[id(persistable)] = Bundle(persistable, self._bundles)
-
-    def _check_value(self, value):
-        if isinstance(value, Reference):
-            return
-        if isinstance(value, tuple):
-            for item in value:
-                self._check_value(item)
-            return
-        if isinstance(value, dict):
-            for item in value.itervalues():
-                self._check_value(item)
-            return
-        if isinstance(value, Custom):
-            return
-        if isinstance(value, (int, float, str, unicode, uuid.UUID)):
-            return
-        if value is None:
-            return
-        if isinstance(value, BaseException):
-            return
-
-        raise RuntimeError("Invalid type '{}'".format(value))
 
 
 class Unbundler(object):
@@ -242,11 +151,6 @@ class Unbundler(object):
     The unbundler provides a readonly view of a bundle that is used while a 
     persistable is reloading its state.
     """
-
-    DECODERS = (PersistablePersister.decode,
-                ListPersister.decode,
-                DictPersister.decode,
-                CallbackPersister.decode)
 
     def __init__(self, bundle, loop, persistables=None):
         self._bundle = bundle
@@ -289,12 +193,14 @@ class Unbundler(object):
         return self._get_loop(self._bundle.loop_ref)
 
     def decode(self, value):
-        for decode in self.DECODERS:
-            try:
-                value = decode(value, self)
-                break
-            except (TypeError, ValueError):
-                pass
+        if isinstance(value, Reference):
+            return self.get_persistable(value)
+
+        if isinstance(value, tuple):
+            return tuple(self.decode(item) for item in value)
+
+        if isinstance(value, dict):
+            return {k: self.decode(item) for k, item in value.iteritems()}
 
         return value
 
@@ -318,11 +224,3 @@ class Unbundler(object):
             return self.get_persistable(ref)
         else:
             return None
-
-    def _load_callback(self, saved_state):
-        obj_id = saved_state.get(_CALLBACK_OBJ_ID, None)
-        if obj_id is not None:
-            obj = self.get_persistable(obj_id)
-            return getattr(obj, saved_state[_CALLBACK_FN_NAME])
-        else:
-            return utils.load_object(saved_state[_CALLBACK_FN_NAME])

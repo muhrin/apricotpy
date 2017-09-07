@@ -11,16 +11,16 @@ _LOGGER = logging.getLogger(__name__)
 
 class ContextMixin(object):
     """
-    Add a context to a Persistable.  The contents of the context will be saved
+    Add a context to a LoopPersistable.  The contents of the context will be saved
     in the instance state unlike standard instance variables.
     """
     CONTEXT = 'context'
 
     def __init__(self, *args, **kwargs):
-        assert isinstance(self, core.Persistable), "Has to be used with a Persistable"
+        assert isinstance(self, core.LoopPersistable), "Has to be used with a LoopPersistable"
 
         super(ContextMixin, self).__init__(*args, **kwargs)
-        self._context = apricotpy.utils.SimpleNamespace()
+        self._context = apricotpy.utils.AttributesDict()
 
     @property
     def ctx(self):

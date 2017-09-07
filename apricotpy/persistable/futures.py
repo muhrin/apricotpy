@@ -4,7 +4,7 @@ from . import core
 __all__ = ['gather']
 
 
-class Future(apricotpy.Future, core.Persistable):
+class Future(apricotpy.Future, core.LoopPersistable):
     STATE = 'STATE'
     RESULT = 'RESULT'
     EXCEPTION = 'EXCEPTION'

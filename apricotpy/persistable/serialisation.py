@@ -34,7 +34,7 @@ class PicklePersister(Persister):
         self._path = path
 
     def serialise_state(self, saved_state):
-        uuid = saved_state[core.Persistable.UUID]
+        uuid = saved_state[core.LoopPersistable.UUID]
         path = os.path.join(self._path, "{}.p".format(uuid))
         with open(path, 'wb') as f:
             pickle.dump(saved_state, f)
