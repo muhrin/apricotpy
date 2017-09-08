@@ -35,8 +35,8 @@ class Function(core.LoopPersistable):
 
         out_state[_KWARGS] = self._kwargs
 
-    def load_instance_state(self, saved_state, loop):
-        super(Function, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(Function, self).load_instance_state(saved_state)
 
         self._fn = utils.load_object(saved_state[_FN])
 

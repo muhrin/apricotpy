@@ -203,11 +203,11 @@ class Future(Awaitable):
             self._loop.call_soon(callback, self)
 
 
-def _create_fathering_future_type(future_type):
+def _gathering_future_template(future_type):
     class _GatheringFutureTemplate(future_type):
         def __init__(self, children, loop):
             super(_GatheringFutureTemplate, self).__init__(loop)
-            self._children = children
+            self._children = tuple(children)
             self._n_done = 0
 
             for child in self._children:
@@ -241,12 +241,12 @@ def _create_fathering_future_type(future_type):
                 self._all_done()
 
         def _all_done(self):
-            self.set_result([child.result() for child in self._children])
+            self.set_result(tuple(child.result() for child in self._children))
 
     return _GatheringFutureTemplate
 
 
-_GatheringFuture = _create_fathering_future_type(Future)
+_GatheringFuture = _gathering_future_template(Future)
 
 
 def gather(awaitables, loop):

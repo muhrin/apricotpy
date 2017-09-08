@@ -152,7 +152,7 @@ class AbstractEventLoop(object):
         """
         pass
 
-        # endregion
+    # endregion
 
     @abstractmethod
     def close(self):

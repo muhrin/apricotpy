@@ -121,7 +121,7 @@ def create_from_with_loop(saved_state, loop):
     class_name = saved_state['CLASS_NAME']
     obj_class = load_object(class_name)
     obj = obj_class.__new__(obj_class)
-    obj.load_instance_state(saved_state, loop)
+    obj.load_instance_state(saved_state)
     return obj
 
 

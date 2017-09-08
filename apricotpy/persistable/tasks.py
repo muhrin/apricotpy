@@ -35,8 +35,8 @@ class Task(
         if self._awaiting_result is not _NO_RESULT:
             out_state[self.AWAITING_RESULT] = self._awaiting_result
 
-    def load_instance_state(self, saved_state, loop):
-        super(Task, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(Task, self).load_instance_state(saved_state)
 
         self._awaiting = saved_state[self.AWAITING]
 

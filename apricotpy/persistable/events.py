@@ -17,9 +17,9 @@ class _PersistableHandleMixin(core.LoopPersistable):
         out_state[self.ARGS] = self._args
         out_state[self.CANCELLED] = self._cancelled
 
-    def load_instance_state(self, saved_state, loop):
+    def load_instance_state(self, saved_state):
 
-        super(_PersistableHandleMixin, self).load_instance_state(saved_state, loop)
+        super(_PersistableHandleMixin, self).load_instance_state(saved_state)
 
         self._loop = saved_state.loop()
         self._fn = saved_state[self.FN]
@@ -73,8 +73,8 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
         super(Handle, self).save_instance_state(out_state)
         out_state[self.WHEN] = self._when
 
-    def load_instance_state(self, saved_state, loop):
-        super(Handle, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(Handle, self).load_instance_state(saved_state)
         self._when = saved_state[self.WHEN]
         if self._when != self.RAN:
             self._loop._insert_callback(self)
@@ -112,6 +112,6 @@ class TimerHandle(Handle):
         super(TimerHandle, self).save_instance_state(out_state)
         out_state[self.SCHEDULED] = self._scheduled
 
-    def load_instance_state(self, saved_state, loop):
-        super(TimerHandle, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(TimerHandle, self).load_instance_state(saved_state)
         self._scheduled = saved_state[self.SCHEDULED]

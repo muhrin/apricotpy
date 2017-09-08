@@ -29,14 +29,14 @@ class PersistableLoopObjectMixin(core.LoopPersistable):
         out_state[self.UUID] = self.uuid
         out_state[self.LOOP_CALLBACK] = self._loop_callback
 
-    def load_instance_state(self, saved_state, loop):
-        super(PersistableLoopObjectMixin, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(PersistableLoopObjectMixin, self).load_instance_state(saved_state)
 
         self._loop = saved_state.loop()
         self._uuid = saved_state[self.UUID]
         self._loop_callback = saved_state[self.LOOP_CALLBACK]
 
-        if loop is not None:
+        if self._loop is not None:
             self._loop._insert_object(self)
 
 

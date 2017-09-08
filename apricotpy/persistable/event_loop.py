@@ -1,12 +1,9 @@
 import apricotpy
+import apricotpy.messages
 import heapq
-import itertools
-from . import core
 from . import events
 from . import futures
 from . import objects
-from . import serialisation
-from . import utils
 
 __all__ = ['BaseEventLoop']
 
@@ -53,7 +50,11 @@ class _CallbackLoop(object):
         return timer
 
     def _insert_ready(self, handle):
-        handle._when_ready = self._engine.time()
+        """
+        :param handle: The callback handle 
+        :type handle: :class:`events.Handle`
+        """
+        handle._when = self._engine.time()
         heapq.heappush(self._ready, handle)
 
     def _insert_scheduled(self, timer):
@@ -88,16 +89,22 @@ class BaseEventLoop(apricotpy.BaseEventLoop, objects.LoopObject):
     def save_instance_state(self, out_state):
         super(BaseEventLoop, self).save_instance_state(out_state)
 
-        out_state[self.READY] = self._callback_loop._ready
-        out_state[self.SCHEDULED] = self._callback_loop._scheduled
+        out_state[self.READY] = tuple(self._callback_loop._ready)
+        out_state[self.SCHEDULED] = tuple(self._callback_loop._scheduled)
         out_state[self.OBJECTS] = self._objects
 
-    def load_instance_state(self, saved_state, loop):
-        super(BaseEventLoop, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(BaseEventLoop, self).load_instance_state(saved_state)
 
-        self._callback_loop._ready = saved_state[self.READY]
-        self._callback_loop._scheduled = saved_state[self.SCHEDULED]
+        self._callback_loop = _CallbackLoop(self)
+        self._callback_loop._ready = list(saved_state[self.READY])
+        self._callback_loop._scheduled = list(saved_state[self.SCHEDULED])
         self._objects = saved_state[self.OBJECTS]
+
+        # Runtime state stuff
+        self._stopping = False
+        self._object_factory = None
+        self.__mailman = apricotpy.messages.Mailman(self)
 
     def _insert_object(self, obj):
         self._objects[obj.uuid] = obj

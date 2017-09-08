@@ -21,15 +21,31 @@ class Future(apricotpy.Future, core.LoopPersistable):
         out_state[self.EXCEPTION] = self._exception
         out_state[self.CALLBACKS] = tuple(self._callbacks)
 
-    def load_instance_state(self, saved_state, loop):
-        self._loop = loop
+    def load_instance_state(self, saved_state):
+        super(Future, self).load_instance_state(saved_state)
+
+        self._loop = saved_state.loop()
         self._state = saved_state[self.STATE]
         self._result = saved_state[self.RESULT]
         self._exception = saved_state[self.EXCEPTION]
         self._callbacks = list(saved_state[self.CALLBACKS])
 
 
-_GatheringFuture = apricotpy.futures._create_fathering_future_type(Future)
+class _GatheringFuture(apricotpy.futures._gathering_future_template(Future)):
+    CHILDREN = 'CHILDREN'
+    N_DONE = 'N_DONE'
+    
+    def save_instance_state(self, out_state):
+        super(_GatheringFuture, self).save_instance_state(out_state)
+
+        out_state[self.CHILDREN] = self._children
+        out_state[self.N_DONE] = self._n_done
+
+    def load_instanece_state(self, saved_state):
+        super(_GatheringFuture, self).load_instanece_state(saved_state)
+
+        self._children = saved_state[self.CHILDREN]
+        self._n_done = saved_state[self.N_DONE]
 
 
 def gather(awaitables, loop):

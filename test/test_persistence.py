@@ -18,8 +18,8 @@ class PersistableValue(persistable.LoopObject):
         super(PersistableValue, self).save_instance_state(out_state)
         out_state['value'] = self.value
 
-    def load_instance_state(self, saved_state, loop):
-        super(PersistableValue, self).load_instance_state(saved_state, loop)
+    def load_instance_state(self, saved_state):
+        super(PersistableValue, self).load_instance_state(saved_state)
         self.value = saved_state['value']
 
 
