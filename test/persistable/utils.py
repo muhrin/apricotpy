@@ -11,3 +11,7 @@ class TestCaseWithLoop(unittest.TestCase):
         super(TestCaseWithLoop, self).tearDown()
         self.loop.close()
         self.loop = None
+
+
+class SimpleObject(persistable.LoopObject):
+    pass

@@ -1,5 +1,6 @@
 import abc
 import apricotpy
+import collections
 import inspect
 import logging
 import uuid
@@ -30,9 +31,21 @@ class LoopPersistable(object):
         pass
 
 
-class Reference(object):
-    def __init__(self, obj_id):
-        self.id = obj_id
+class _Reference(collections.Hashable):
+    def __init__(self, obj):
+        if isinstance(obj, apricotpy.LoopObject):
+            self.id = obj.uuid
+        else:
+            self.id = id(obj)
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __eq__(self, other):
+        return self.id == other
+
+    def __repr__(self):
+        return "<Reference {}>".format(self.id)
 
 
 class Custom(object):
@@ -52,24 +65,24 @@ class Bundle(dict):
     def __init__(self, persistable, bundles=None):
         super(Bundle, self).__init__()
         self._class_name = utils.class_name(persistable)
-        self._id = id(persistable)
+        self._id = _Reference(persistable)
 
         if persistable.loop() is None:
             self._loop_ref = None
         else:
-            self._loop_ref = Reference(id(persistable.loop()))
+            self._loop_ref = _Reference(persistable.loop())
 
         if bundles is None:
             # We're the 'root' bundle (i.e. the first to be Bundled)
             self._bundles = {}
             # 'Bootstrap' by inserting the root loop as empty
             if self._loop_ref is not None:
-                self._bundles[self._loop_ref.id] = None
+                self._bundles[self._loop_ref] = None
         else:
             assert self._id not in bundles, "Already bundled!"
             self._bundles = bundles
 
-        self._bundles[id(persistable)] = self
+        self._bundles[_Reference(persistable)] = self
         persistable.save_instance_state(self)
 
         _LOGGER.debug("Bundling {}".format(self))
@@ -97,6 +110,7 @@ class Bundle(dict):
 
     @property
     def loop_ref(self):
+        """ The reference to the loop this persistable is in """
         return self._loop_ref
 
     def unbundle(self, loop):
@@ -111,8 +125,13 @@ class Bundle(dict):
         return Unbundler(self, loop).do()
 
     def encode(self, value):
-        if isinstance(value, (LoopPersistable, apricotpy.LoopObject)):
-            return self._create_reference(value)
+        if isinstance(value, apricotpy.LoopObject) and \
+                not isinstance(value, LoopPersistable):
+            raise ValueError("The object '{}' is not persistable".format(value))
+
+        if isinstance(value, LoopPersistable):
+            self._ensure_bundle(value)
+            return _Reference(value)
 
         if utils.is_sequence_not_str(value):
             if isinstance(value, tuple):
@@ -127,7 +146,8 @@ class Bundle(dict):
             from .persistables import Function
 
             fn_obj = Function(value)
-            return self._create_reference(fn_obj)
+            self._ensure_bundle(fn_obj)
+            return _Reference(fn_obj)
 
         if isinstance(value, (int, float, str, unicode, uuid.UUID)):
             return value
@@ -141,20 +161,10 @@ class Bundle(dict):
 
         raise ValueError("Unsupported value type '{}'".format(value))
 
-    def _create_reference(self, obj):
-        if isinstance(obj, LoopPersistable):
-            self._ensure_bundle(obj)
-            return Reference(id(obj))
-        elif isinstance(obj, apricotpy.LoopObject):
-            # Create an 'active' reference, i.e. to an object in the loop
-            # it must be there when we are unbundled as well
-            return Reference(obj.uuid)
-        else:
-            raise ValueError("Could not construct a valid reference for object '{}'".format(obj))
-
     def _ensure_bundle(self, persistable):
-        if id(persistable) not in self._bundles:
-            self._bundles[id(persistable)] = Bundle(persistable, self._bundles)
+        ref = _Reference(persistable)
+        if ref not in self._bundles:
+            self._bundles[ref] = Bundle(persistable, self._bundles)
 
 
 class Unbundler(object):
@@ -167,12 +177,16 @@ class Unbundler(object):
         self._bundle = bundle
         self._unbundled = None
 
+        # Adopt lazy-unbundling approach.  Nothing actually gets loaded
+        # here, only when it is requested via the do() call
+
         if persistables is None:
             # We're the root that is being unbundled
             self._persistables = {}
-            if self._bundle.loop_ref is not None:
-                self._persistables[self._bundle.loop_ref.id] = loop
+            if self.loop_ref is not None:
+                self._persistables[self.loop_ref] = loop
         else:
+            # A parent unbundler passed us the global persistables
             self._persistables = persistables
             ref_id = bundle.id
             if ref_id in self._persistables:
@@ -200,6 +214,10 @@ class Unbundler(object):
     def __getitem__(self, item):
         return self.decode(self._bundle[item])
 
+    @property
+    def loop_ref(self):
+        return self._bundle.loop_ref
+
     def get(self, item, default=_NULL):
         try:
             self.__getitem__(item)
@@ -210,14 +228,13 @@ class Unbundler(object):
                 raise ValueError("Unknown item")
 
     def loop(self):
-        loop_ref = self._bundle.loop_ref
-        if loop_ref is not None:
-            return self.get_persistable(loop_ref)
+        if self.loop_ref is not None:
+            return self.get_persistable(self.loop_ref)
         else:
             return None
 
     def decode(self, value):
-        if isinstance(value, Reference):
+        if isinstance(value, _Reference):
             return self.get_persistable(value)
 
         if isinstance(value, tuple):
@@ -229,23 +246,17 @@ class Unbundler(object):
         return value
 
     def get_persistable(self, ref):
-        if not isinstance(ref, Reference):
+        if not isinstance(ref, _Reference):
             raise TypeError
 
-        # First try getting it from the loop
-        if ref.id not in self._bundle._bundles:
-            try:
-                return self.loop().get_object(ref.id)
-            except ValueError:
-                raise ValueError(
-                    "Object with id '{}' is not in the bundle nor in the active loop".format(ref.id)
-                )
+        if ref in self._bundle._bundles:
+            if ref in self._persistables:
+                return self._persistables[ref]
+            else:
+                bundle = self._bundle._bundles[ref]
+                persistable = Unbundler(bundle, persistables=self._persistables).do()
+                self._persistables[ref] = persistable
 
-        if ref.id in self._persistables:
-            return self._persistables[ref.id]
+                return persistable
         else:
-            bundle = self._bundle._bundles[ref.id]
-            persistable = Unbundler(bundle, persistables=self._persistables).do()
-            self._persistables[ref.id] = persistable
-
-            return persistable
+            raise ValueError("Object referred to now found ({})".format(ref))

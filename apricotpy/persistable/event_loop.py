@@ -1,9 +1,13 @@
 import apricotpy
 import apricotpy.messages
 import heapq
+import logging
+from . import core
 from . import events
 from . import futures
 from . import objects
+
+_LOGGER = logging.getLogger(__name__)
 
 __all__ = ['BaseEventLoop']
 
@@ -91,7 +95,15 @@ class BaseEventLoop(apricotpy.BaseEventLoop, objects.LoopObject):
 
         out_state[self.READY] = tuple(self._callback_loop._ready)
         out_state[self.SCHEDULED] = tuple(self._callback_loop._scheduled)
-        out_state[self.OBJECTS] = self._objects
+
+        to_save = dict(self._objects)
+        # Remove those that are not savable
+        for uuid, obj in self._objects.iteritems():
+            if not isinstance(obj, core.LoopPersistable):
+                _LOGGER.warning("Not saving object '{}', it is not persistable".format(obj))
+                to_save.pop(uuid)
+
+        out_state[self.OBJECTS] = to_save
 
     def load_instance_state(self, saved_state):
         super(BaseEventLoop, self).load_instance_state(saved_state)
