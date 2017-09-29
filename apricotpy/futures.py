@@ -1,5 +1,7 @@
 import abc
 import concurrent.futures
+import sys
+import traceback
 
 __all__ = ['CancelledError',
            'Awaitable',
@@ -52,10 +54,12 @@ class Awaitable(object):
 
 
 class _FutureBase(object):
+    # Class variables serving as defaults for instance variables.
+    _state = _PENDING
+    _result = None
+    _exception = None
+
     def __init__(self):
-        self._state = _PENDING
-        self._result = None
-        self._exception = None
         self._callbacks = []
 
     def cancel(self):
@@ -105,12 +109,23 @@ class _FutureBase(object):
 
 
 class Future(Awaitable):
+    # Class variables serving as defaults for instance variables.
+    _state = _PENDING
+    _result = None
+    _exception = None
+    _loop = None
+    _source_traceback = None
+
     def __init__(self, loop):
+        """Initialize the future.
+        The optional event_loop argument allows explicitly setting the event
+        loop object used by the future. If it's not provided, the future uses
+        the default event loop.
+        """
         self._loop = loop
-        self._state = _PENDING
-        self._result = None
-        self._exception = None
         self._callbacks = []
+        if self._loop.get_debug():
+            self._source_traceback = traceback.extract_stack(sys._getframe(1))
 
     def __invert__(self):
         return self._loop.run_until_complete(self)

@@ -9,6 +9,7 @@ class _PersistableHandleMixin(core.LoopPersistable):
     FN = 'FN'
     ARGS = 'ARGS'
     CANCELLED = 'CANCELLED'
+    REPR = 'REPR'
 
     def save_instance_state(self, out_state):
         super(_PersistableHandleMixin, self).save_instance_state(out_state)
@@ -16,15 +17,16 @@ class _PersistableHandleMixin(core.LoopPersistable):
         out_state[self.FN] = self._fn
         out_state[self.ARGS] = self._args
         out_state[self.CANCELLED] = self._cancelled
+        out_state[self.REPR] = self._repr
 
     def load_instance_state(self, saved_state):
-
         super(_PersistableHandleMixin, self).load_instance_state(saved_state)
 
         self._loop = saved_state.loop()
         self._fn = saved_state[self.FN]
         self._args = saved_state[self.ARGS]
         self._cancelled = saved_state[self.CANCELLED]
+        self._repr = saved_state[self.REPR]
 
 
 class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
@@ -80,8 +82,8 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
             self._loop._insert_callback(self)
 
     def _run(self):
-        super(Handle, self)._run()
         self._when = self.RAN
+        super(Handle, self)._run()
 
 
 class TimerHandle(Handle):
@@ -92,6 +94,9 @@ class TimerHandle(Handle):
     def __init__(self, when, fn, args, loop):
         assert when is not None
         super(TimerHandle, self).__init__(fn, args, loop)
+        if self._source_traceback:
+            # Delete the one generated from our super
+            del self._source_traceback[-1]
         self._scheduled = False
 
     def _repr_info(self):

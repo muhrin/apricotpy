@@ -18,6 +18,24 @@ class LoopPersistable(object):
     """
     __metaclass__ = abc.ABCMeta
 
+    # Class variables serving as defaults for instance variables.
+    _persistable_id = None
+
+    @property
+    def persistable_id(self):
+        """
+        Overwrite this if you want to provide your own persistable ID, e.g.
+        because you already have a UUID.
+        
+        Be careful though, this ID should be a unique type that identifies this
+        _instance_!  And must be of a type that can be saved in :class:`Bundle`
+        
+        :return: A persistable id that identifies this instance 
+        """
+        if self._persistable_id is None:
+            self._persistable_id = uuid.uuid4()
+        return self._persistable_id
+
     @abc.abstractmethod
     def loop(self):
         pass
@@ -33,10 +51,8 @@ class LoopPersistable(object):
 
 class _Reference(collections.Hashable):
     def __init__(self, obj):
-        if isinstance(obj, apricotpy.LoopObject):
-            self.id = obj.uuid
-        else:
-            self.id = id(obj)
+        assert isinstance(obj, LoopPersistable), "Can only refer to loop persistables"
+        self.id = obj.persistable_id
 
     def __hash__(self):
         return hash(self.id)
@@ -46,12 +62,6 @@ class _Reference(collections.Hashable):
 
     def __repr__(self):
         return "<Reference {}>".format(self.id)
-
-
-class Custom(object):
-    def __init__(self, type_id, value):
-        self.type_id = type_id
-        self.value = value
 
 
 class Bundle(dict):
@@ -94,7 +104,7 @@ class Bundle(dict):
                 "may be a unintentional conflict".format(key, self.class_name)
             )
 
-        value = self.encode(value)
+        value = self._encode(value)
         super(Bundle, self).__setitem__(key, value)
 
     def __str__(self):
@@ -124,30 +134,28 @@ class Bundle(dict):
         _LOGGER.debug("Unbundling root {}".format(self))
         return Unbundler(self, loop).do()
 
-    def encode(self, value):
+    def _encode(self, value):
         if isinstance(value, apricotpy.LoopObject) and \
                 not isinstance(value, LoopPersistable):
             raise ValueError("The object '{}' is not persistable".format(value))
 
         if isinstance(value, LoopPersistable):
-            self._ensure_bundle(value)
-            return _Reference(value)
+            return self._ensure_bundle(value)
 
         if utils.is_sequence_not_str(value):
             if isinstance(value, tuple):
-                return tuple(self.encode(item) for item in value)
+                return tuple(self._encode(item) for item in value)
             else:
                 raise ValueError("Unsupported sequence type ({}), use a tuple".format(type(value)))
 
         if isinstance(value, dict):
-            return {k: self.encode(item) for k, item in value.iteritems()}
+            return {k: self._encode(item) for k, item in value.iteritems()}
 
         if inspect.isfunction(value) or inspect.ismethod(value):
             from .persistables import Function
 
             fn_obj = Function(value)
-            self._ensure_bundle(fn_obj)
-            return _Reference(fn_obj)
+            return self._ensure_bundle(fn_obj)
 
         if isinstance(value, (int, float, str, unicode, uuid.UUID)):
             return value
@@ -165,6 +173,7 @@ class Bundle(dict):
         ref = _Reference(persistable)
         if ref not in self._bundles:
             self._bundles[ref] = Bundle(persistable, self._bundles)
+        return ref
 
 
 class Unbundler(object):

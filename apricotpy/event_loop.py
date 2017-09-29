@@ -3,16 +3,20 @@ from collections import deque
 import logging
 import heapq
 import itertools
+import os
+import sys
 import time
 import threading
+import traceback
 
 from . import futures
 from . import events
 from . import messages
 
-_LOGGER = logging.getLogger(__name__)
-
 __all__ = ['BaseEventLoop']
+
+_LOGGER = logging.getLogger(__name__)
+_DEBUG_ENV_VAR = 'PYTHONAPRICOTDEBUG'
 
 
 class AbstractEventLoop(object):
@@ -35,6 +39,7 @@ class AbstractEventLoop(object):
     def run_until_complete(self, future):
         pass
 
+    # region Callbacks
     @abstractmethod
     def call_soon(self, fn, *args):
         pass
@@ -66,6 +71,8 @@ class AbstractEventLoop(object):
         :rtype: :class:`events.Handle`
         """
         pass
+
+    # endregion
 
     @abstractmethod
     def time(self):
@@ -159,6 +166,35 @@ class AbstractEventLoop(object):
         """Shutdown the event loop"""
         pass
 
+    # region Error handlers
+    @abstractmethod
+    def get_exception_handler(self):
+        pass
+
+    @abstractmethod
+    def set_exception_handler(self, handler):
+        pass
+
+    @abstractmethod
+    def default_exception_handler(self, context):
+        pass
+
+    @abstractmethod
+    def call_exception_handler(self, context):
+        pass
+
+    # endregion
+
+    # region Debugging
+    @abstractmethod
+    def get_debug(self):
+        pass
+
+    @abstractmethod
+    def set_debug(self, enabled):
+        pass
+        # endregion
+
 
 class _CallbackLoop(object):
     def __init__(self, event_loop):
@@ -188,7 +224,7 @@ class _CallbackLoop(object):
             handle._run()
 
     def call_soon(self, fn, *args):
-        handle = events.Handle(fn, args, self)
+        handle = events.Handle(fn, args, self._event_loop)
         self._ready.append(handle)
         return handle
 
@@ -196,7 +232,7 @@ class _CallbackLoop(object):
         return self.call_at(self._event_loop.time() + delay, fn, *args)
 
     def call_at(self, when, fn, *args):
-        timer = events.TimerHandle(when, fn, args, self)
+        timer = events.TimerHandle(when, fn, args, self._event_loop)
         heapq.heappush(self._scheduled, timer)
         return timer
 
@@ -223,6 +259,10 @@ class BaseEventLoop(AbstractEventLoop):
         self._object_factory = None
 
         self._thread_id = None
+        self._exception_handler = None
+        self.set_debug((not sys.flags.ignore_environment
+                        and bool(os.environ.get(_DEBUG_ENV_VAR))))
+        self._current_handle = None
 
         self.__mailman = messages.Mailman(self)
 
@@ -352,6 +392,9 @@ class BaseEventLoop(AbstractEventLoop):
     def close(self):
         assert not self.is_running(), "Can't close a running loop"
 
+        if self._debug:
+            _LOGGER.debug("Close %r", self)
+
         self._stopping = False
         self._callback_loop._close()
 
@@ -361,6 +404,126 @@ class BaseEventLoop(AbstractEventLoop):
         self._thread_id = None
 
         self.__mailman = None
+
+    # region Errors
+    def get_exception_handler(self):
+        """Return an exception handler, or None if the default one is in use.
+        """
+        return self._exception_handler
+
+    def set_exception_handler(self, handler):
+        """Set handler as the new event loop exception handler.
+        If handler is None, the default exception handler will
+        be set.
+        If handler is a callable object, it should have a
+        signature matching '(loop, context)', where 'loop'
+        will be a reference to the active event loop, 'context'
+        will be a dict object (see `call_exception_handler()`
+        documentation for details about context).
+        """
+        if handler is not None and not callable(handler):
+            raise TypeError('A callable object or None is expected, '
+                            'got {!r}'.format(handler))
+        self._exception_handler = handler
+
+    def default_exception_handler(self, context):
+        """Default exception handler.
+        This is called when an exception occurs and no exception
+        handler is set, and can be called by a custom exception
+        handler that wants to defer to the default behavior.
+        The context parameter has the same meaning as in
+        `call_exception_handler()`.
+        """
+        message = context.get('message')
+        if not message:
+            message = 'Unhandled exception in event loop'
+
+        exception = context.get('exception')
+        if exception is not None:
+            exc_info = (type(exception), exception, exception.__traceback__)
+        else:
+            exc_info = False
+
+        if ('source_traceback' not in context
+            and self._current_handle is not None
+            and self._current_handle._source_traceback):
+            context['handle_traceback'] = self._current_handle._source_traceback
+
+        log_lines = [message]
+        for key in sorted(context):
+            if key in {'message', 'exception'}:
+                continue
+            value = context[key]
+            if key == 'source_traceback':
+                tb = ''.join(traceback.format_list(value))
+                value = 'Object created at (most recent call last):\n'
+                value += tb.rstrip()
+            elif key == 'handle_traceback':
+                tb = ''.join(traceback.format_list(value))
+                value = 'Handle created at (most recent call last):\n'
+                value += tb.rstrip()
+            else:
+                value = repr(value)
+            log_lines.append('{}: {}'.format(key, value))
+
+        _LOGGER.error('\n'.join(log_lines), exc_info=exc_info)
+
+    def call_exception_handler(self, context):
+        """Call the current event loop's exception handler.
+        The context argument is a dict containing the following keys:
+        - 'message': Error message;
+        - 'exception' (optional): Exception object;
+        - 'future' (optional): Future instance;
+        - 'handle' (optional): Handle instance;
+        - 'protocol' (optional): Protocol instance;
+        - 'transport' (optional): Transport instance;
+        - 'socket' (optional): Socket instance;
+        - 'asyncgen' (optional): Asynchronous generator that caused
+                                 the exception.
+        New keys maybe introduced in the future.
+        Note: do not overload this method in an event loop subclass.
+        For custom exception handling, use the
+        `set_exception_handler()` method.
+        """
+        if self._exception_handler is None:
+            try:
+                self.default_exception_handler(context)
+            except Exception:
+                # Second protection layer for unexpected errors
+                # in the default implementation, as well as for subclassed
+                # event loops with overloaded "default_exception_handler".
+                _LOGGER.error('Exception in default exception handler',
+                              exc_info=True)
+        else:
+            try:
+                self._exception_handler(self, context)
+            except Exception as exc:
+                # Exception in the user set custom exception handler.
+                try:
+                    # Let's try default handler.
+                    self.default_exception_handler({
+                        'message': 'Unhandled error in exception handler',
+                        'exception': exc,
+                        'context': context,
+                    })
+                except Exception:
+                    # Guard 'default_exception_handler' in case it is
+                    # overloaded.
+                    _LOGGER.error('Exception in default exception handler '
+                                  'while handling an unexpected error '
+                                  'in custom exception handler',
+                                  exc_info=True)
+
+    # endregion
+
+    # region Debugging
+    def get_debug(self):
+        return self._debug
+
+    def set_debug(self, enabled):
+        self._debug = enabled
+
+    # endregion
 
     def _tick(self):
         self._callback_loop._tick()

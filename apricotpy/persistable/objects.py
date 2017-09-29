@@ -23,6 +23,10 @@ class PersistableLoopObjectMixin(core.LoopPersistable):
         assert isinstance(self, objects.LoopObject), "Has to be used with a LoopObject"
         super(PersistableLoopObjectMixin, self).__init__(*args, **kwargs)
 
+    @property
+    def persistable_id(self):
+        return self.uuid
+
     def save_instance_state(self, out_state):
         super(PersistableLoopObjectMixin, self).save_instance_state(out_state)
 

@@ -1,4 +1,6 @@
 import abc
+import sys
+import traceback
 import uuid
 
 from . import futures
@@ -121,6 +123,9 @@ class AwaitableMixin(futures.Awaitable):
 
     def on_loop_inserted(self, loop):
         super(AwaitableMixin, self).on_loop_inserted(loop)
+        if not self._loop.get_debug():
+            self._source_traceback = None
+
         if self.done():
             self._schedule_callbacks()
 

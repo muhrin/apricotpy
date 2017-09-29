@@ -1,7 +1,6 @@
 import collections
 import inspect
 import logging
-import traceback
 from . import core
 from . import utils
 
@@ -61,13 +60,7 @@ class Function(core.LoopPersistable, collections.Callable):
         kwargs = dict(self._kwargs)
         kwargs.update(kwargs)
 
-        try:
-            return self._fn(*args, **kwargs)
-        except BaseException:
-            _LOGGER.debug(
-                "Exception trying to call callback '{}':\n{}".format(
-                    self._fn, traceback.format_exc()))
-            raise
+        return self._fn(*args, **kwargs)
 
 
 class ObjectProxy(core.LoopPersistable):

@@ -1,6 +1,8 @@
 import functools
-import reprlib
 import inspect
+import reprlib
+import sys
+import traceback
 
 from . import objects
 from . import tasks
@@ -68,16 +70,20 @@ class Handle(object):
         self._args = args
         self._cancelled = False
         self._repr = None
+        if self._loop.get_debug():
+            self._source_traceback = traceback.extract_stack(sys._getframe(1))
+        else:
+            self._source_traceback = None
 
     def _repr_info(self):
         info = [self.__class__.__name__]
-
         if self._cancelled:
             info.append('cancelled')
-
         if self._fn is not None:
             info.append(_format_callback_source(self._fn, self._args))
-
+        if self._source_traceback:
+            frame = self._source_traceback[-1]
+            info.append('created at %s:%s' % (frame[0], frame[1]))
         return info
 
     def __repr__(self):
@@ -91,15 +97,31 @@ class Handle(object):
             return False
 
         self._cancelled = True
+        if self._loop.get_debug():
+            # Keep a representation in debug mode to to be able to print
+            # information about this handle
+            self._repr = repr(self)
         self._fn = None
         self._args = None
 
         return True
 
     def _run(self):
-        assert not self._cancelled, "Cannot run a cancelled callback"
-
-        self._fn(*self._args)
+        try:
+            assert not self._cancelled, "Cannot run a cancelled callback"
+            self._fn(*self._args)
+        except Exception as exc:
+            cb = _format_callback_source(self._fn, self._args)
+            msg = 'Exception in callback {}'.format(cb)
+            context = {
+                'message': msg,
+                'exception': exc,
+                'handle': self,
+            }
+            if self._source_traceback:
+                context['source_traceback'] = self._source_traceback
+            self._loop.call_exception_handler(context)
+        self = None  # Needed to break cycles when an exception occurs.
 
 
 class TimerHandle(Handle):
@@ -112,6 +134,9 @@ class TimerHandle(Handle):
     def __init__(self, when, fn, args, loop):
         assert when is not None
         super(TimerHandle, self).__init__(fn, args, loop)
+        if self._source_traceback:
+            # Delete the one generated from our super
+            del self._source_traceback[-1]
         self._when = when
         self._scheduled = False
 
