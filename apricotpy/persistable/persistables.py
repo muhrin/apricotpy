@@ -22,10 +22,6 @@ class Function(core.LoopPersistable, collections.Callable):
         self._args = args
         self._kwargs = kwargs
 
-    def loop(self):
-        # Don't need a loop
-        return None
-
     def save_instance_state(self, out_state):
         super(Function, self).save_instance_state(out_state)
 

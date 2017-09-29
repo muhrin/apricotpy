@@ -36,9 +36,8 @@ class LoopPersistable(object):
             self._persistable_id = uuid.uuid4()
         return self._persistable_id
 
-    @abc.abstractmethod
     def loop(self):
-        pass
+        return None
 
     @abc.abstractmethod
     def save_instance_state(self, out_state):
