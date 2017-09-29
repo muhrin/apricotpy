@@ -2,7 +2,6 @@ from abc import ABCMeta
 
 import apricotpy.tasks
 from . import awaitable
-from . import core
 from . import objects
 
 _NO_RESULT = apricotpy.tasks._NO_RESULT
@@ -28,7 +27,7 @@ class Task(
     def save_instance_state(self, out_state):
         super(Task, self).save_instance_state(out_state)
 
-        self._save_next_step(out_state)
+        out_state[self.NEXT_STEP] = self._next_step
         out_state[self.AWAITING] = self._awaiting
         out_state[self.CALLBACK_HANDLE] = self._callback_handle
 
@@ -43,29 +42,12 @@ class Task(
         self._paused = False
         self._callback_handle = saved_state[self.CALLBACK_HANDLE]
 
-        self._next_step = None
-        self._load_next_step(saved_state[self.NEXT_STEP])
+        try:
+            self._next_step = saved_state[self.NEXT_STEP]
+        except KeyError:
+            self._next_step = None
 
         try:
             self._awaiting_result = saved_state[self.AWAITING_RESULT]
         except KeyError:
             self._awaiting_result = _NO_RESULT
-
-    def _save_next_step(self, out_state):
-        if self._next_step is None:
-            out_state[self.NEXT_STEP] = None
-        else:
-            out_state[self.NEXT_STEP] = self._next_step.__name__
-
-    def _load_next_step(self, next_step_name):
-        if next_step_name is not None:
-            try:
-                self._set_next_step(getattr(self, next_step_name))
-            except AttributeError:
-                raise ValueError(
-                    "This Task does not have a function with "
-                    "the name '{}' as expected from the saved state".
-                        format(next_step_name)
-                )
-        else:
-            self._set_next_step(None)

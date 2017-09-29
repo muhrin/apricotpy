@@ -31,11 +31,13 @@ class TestPersistableTask(utils.TestCaseWithLoop):
         saved_state = persistable.Bundle(task)
 
         loop2 = persistable.BaseEventLoop()
-        saved_state.unbundle(loop2)
+        task2 = saved_state.unbundle(loop2)
 
         # Finish
-        ~task
+        self.assertEqual(~task, 5)
+        self.assertEqual(~task2, 5)
 
+        # Check that there is no problem putting it back into original loop
         task = saved_state.unbundle(self.loop)
         result = ~task
 

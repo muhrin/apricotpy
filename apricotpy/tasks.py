@@ -1,6 +1,7 @@
+import abc
 import logging
-from abc import ABCMeta, abstractmethod
 from collections import namedtuple
+import traceback
 
 from . import objects
 from . import futures
@@ -31,7 +32,7 @@ _NO_RESULT = ()
 
 
 class TaskMixin(objects.AwaitableMixin):
-    __metaclass__ = ABCMeta
+    __metaclass__ = abc.ABCMeta
 
     Terminated = namedtuple("Terminated", ['result'])
 
@@ -102,11 +103,11 @@ class TaskMixin(objects.AwaitableMixin):
     def cancel(self):
         cancelled = super(TaskMixin, self).cancel()
         if cancelled and self.awaiting() is not None:
-            self.awaiting().cancel()
+            self._awaiting.cancel()
             self._awaiting = None
         return cancelled
 
-    @abstractmethod
+    @abc.abstractmethod
     def execute(self):
         pass
 
@@ -174,4 +175,13 @@ class TaskMixin(objects.AwaitableMixin):
 
 
 class Task(TaskMixin, objects.LoopObject):
-    pass
+    """
+    A task is an awaitable loop object which has an execute() method
+    that will be called when it is inserted into the loop.
+
+    From this it may return a value (or None) in which case the task is
+    considered done and the value becomes its result.
+
+
+    """
+    __metaclass__ = abc.ABCMeta
