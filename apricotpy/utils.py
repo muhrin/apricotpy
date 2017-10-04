@@ -23,7 +23,7 @@ class AttributesDict(SimpleNamespace):
         return getattr(self, item)
 
     def setdefault(self, key, value):
-        self.__dict__.setdefault(key, value)
+        return self.__dict__.setdefault(key, value)
 
     def get(self, *args, **kwargs):
         return self.__dict__.get(*args, **kwargs)
