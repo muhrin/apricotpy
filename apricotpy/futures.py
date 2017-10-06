@@ -3,11 +3,10 @@ import concurrent.futures
 import sys
 import traceback
 
-__all__ = ['CancelledError',
-           'Awaitable',
-           'Future',
-           'InvalidStateError',
-           'gather']
+from . import events
+
+__all__ = ['CancelledError', 'Awaitable', 'Future',
+           'InvalidStateError', 'gather']
 
 Error = concurrent.futures._base.Error
 CancelledError = concurrent.futures.CancelledError
@@ -116,13 +115,16 @@ class Future(Awaitable):
     _loop = None
     _source_traceback = None
 
-    def __init__(self, loop):
+    def __init__(self, loop=None):
         """Initialize the future.
         The optional event_loop argument allows explicitly setting the event
         loop object used by the future. If it's not provided, the future uses
         the default event loop.
         """
-        self._loop = loop
+        if loop is None:
+            self._loop = events.get_event_loop()
+        else:
+            self._loop = loop
         self._callbacks = []
         if self._loop.get_debug():
             self._source_traceback = traceback.extract_stack(sys._getframe(1))

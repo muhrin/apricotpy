@@ -1,11 +1,20 @@
+import abc
 import functools
 import inspect
+import os
+
 import reprlib
 import sys
+import threading
 import traceback
 
-from . import objects
-from . import tasks
+__all__ = ['AbstractEventLoopPolicy',
+           'AbstractEventLoop',
+           'Handle', 'TimerHandle',
+           'get_event_loop_policy', 'set_event_loop_policy',
+           'get_event_loop', 'set_event_loop', 'new_event_loop',
+           '_push_running_loop', '_pop_running_loop', '_get_running_loop',
+           ]
 
 
 def _get_function_source(func):
@@ -176,3 +185,359 @@ class TimerHandle(Handle):
     def __ne__(self, other):
         equal = self.__eq__(other)
         return NotImplemented if equal is NotImplemented else not equal
+
+
+class AbstractEventLoop(object):
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def create_future(self):
+        """
+
+        :return: A new future
+        :rtype: :class:`futures.Future`
+        """
+        pass
+
+    @abc.abstractmethod
+    def run_forever(self):
+        pass
+
+    @abc.abstractmethod
+    def run_until_complete(self, future):
+        pass
+
+    # region Callbacks
+    @abc.abstractmethod
+    def call_soon(self, fn, *args):
+        pass
+
+    @abc.abstractmethod
+    def call_later(self, delay, callback, *args):
+        """
+        Schedule callback to be called after the given `delay` in seconds.
+
+        :param delay: The callback delay
+        :type delay: float
+        :param callback: The callback to call
+        :param args: The callback arguments
+        :return: A callback handle
+        :rtype: :class:`events.Handle`
+        """
+        pass
+
+    @abc.abstractmethod
+    def call_at(self, when, callback, *args):
+        """
+        Schedule a callback to to be called at a given time
+
+        :param when: The time when to call
+        :type when: float
+        :param callback: The callback to call
+        :param args: The callback arguments
+        :return: A callback handle
+        :rtype: :class:`events.Handle`
+        """
+        pass
+
+    # endregion
+
+    @abc.abstractmethod
+    def time(self):
+        pass
+
+    @abc.abstractmethod
+    def messages(self):
+        pass
+
+    # region Objects
+    @abc.abstractmethod
+    def get_object(self, uuid):
+        pass
+
+    @abc.abstractmethod
+    def objects(self, obj_type=None):
+        """
+        Get the objects in the event loop.  Optionally filer for loop objects of
+        a given type.
+
+        :param obj_type: The loop object class to filter for. 
+        :return: A list of the found objects.
+        """
+        pass
+
+    @abc.abstractmethod
+    def create(self, object_type, *args, **kwargs):
+        """
+        Create a task and schedule it to be inserted into the loop.
+
+        :param object_type: The task identifier 
+        :param args: (optional) positional arguments to the task
+        :param kwargs: (optional) keyword arguments to the task
+
+        :return: The task object
+        """
+        pass
+
+    @abc.abstractmethod
+    def create_inserted(self, object_type, *args, **kwargs):
+        """
+        Create a task and schedule it to be inserted into the loop.
+
+        :param object_type: The task identifier 
+        :param args: (optional) positional arguments to the task
+        :param kwargs: (optional) keyword arguments to the task
+
+        :return: The future corresponding to the insertion of the object into the loop
+        """
+        pass
+
+    @abc.abstractmethod
+    def remove(self, loop_object):
+        """
+        Schedule an object to be removed an object from the event loop.
+
+        :param loop_object: The object to remove 
+        :return: A future corresponding to the removal of the object
+        """
+        pass
+
+    @abc.abstractmethod
+    def set_object_factory(self, factory):
+        """
+        Set the factory used by :class:`AbstractEventLoop.create_task()`.
+
+        If `None` then the default will be set.
+
+        The factory should be a callabke with signature matching `(loop, task, *args, **kwargs)`
+        where task is some task identifier and positional and keyword arguments
+        can be supplied and it returns the :class:`Task` instance.
+
+        :param factory: The task factory 
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_object_factory(self):
+        """
+        Get the task factory currently in use.  Returns `None` if the default is
+        being used.
+
+        :return: The task factory
+        """
+        pass
+
+    # endregion
+
+    @abc.abstractmethod
+    def close(self):
+        """Shutdown the event loop"""
+        pass
+
+    # region Error handlers
+    @abc.abstractmethod
+    def get_exception_handler(self):
+        pass
+
+    @abc.abstractmethod
+    def set_exception_handler(self, handler):
+        pass
+
+    @abc.abstractmethod
+    def default_exception_handler(self, context):
+        pass
+
+    @abc.abstractmethod
+    def call_exception_handler(self, context):
+        pass
+
+    # endregion
+
+    # region Debugging
+    @abc.abstractmethod
+    def get_debug(self):
+        pass
+
+    @abc.abstractmethod
+    def set_debug(self, enabled):
+        pass
+        # endregion
+
+
+class AbstractEventLoopPolicy(object):
+    """Abstract policy for accessing the event loop."""
+
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def get_event_loop(self):
+        """Get the event loop for the current context.
+
+        Returns an event loop object implementing the BaseEventLoop interface,
+        or raises an exception in case no event loop has been set for the
+        current context and the current policy does not specify to create one.
+
+        It should never return None."""
+        pass
+
+    @abc.abstractmethod
+    def set_event_loop(self, loop):
+        """Set the event loop for the current context to loop."""
+        pass
+
+    @abc.abstractmethod
+    def new_event_loop(self):
+        """Create and return a new event loop object according to this
+        policy's rules. If there's need to set this loop as the event loop for
+        the current context, set_event_loop must be called explicitly."""
+        pass
+
+
+class BaseDefaultEventLoopPolicy(AbstractEventLoopPolicy):
+    """Default policy implementation for accessing the event loop.
+
+    In this policy, each thread has its own event loop.  However, we
+    only automatically create an event loop by default for the main
+    thread; other threads by default have no event loop.
+
+    Other policies may have different rules (e.g. a single global
+    event loop, or automatically creating an event loop per thread, or
+    using some other notion of context to which an event loop is
+    associated).
+    """
+
+    _loop_factory = None
+
+    class _Local(threading.local):
+        _loop = None
+        _set_called = False
+
+    def __init__(self):
+        self._local = self._Local()
+
+    def get_event_loop(self):
+        """Get the event loop.
+
+        This may be None (in which case RuntimeError is raised) or an instance of EventLoop.
+        """
+        if (self._local._loop is None and
+                not self._local._set_called and
+                isinstance(threading.current_thread(), threading._MainThread)):
+            self.set_event_loop(self.new_event_loop())
+        if self._local._loop is None:
+            raise RuntimeError('There is no current event loop in thread %r.'
+                               % threading.current_thread().name)
+        return self._local._loop
+
+    def set_event_loop(self, loop):
+        """Set the event loop."""
+        self._local._set_called = True
+        assert loop is None or isinstance(loop, AbstractEventLoop)
+        self._local._loop = loop
+
+    def new_event_loop(self):
+        """Create a new event loop.
+
+        You must call set_event_loop() to make this the current event
+        loop.
+        """
+        return self._loop_factory()
+
+
+# Event loop policy.  The policy itself is always global, even if the
+# policy's rules say that there is an event loop per thread (or other
+# notion of context).  The default policy is installed by the first
+# call to get_event_loop_policy().
+_event_loop_policy = None
+
+# Lock for protecting the on-the-fly creation of the event loop policy.
+_lock = threading.Lock()
+
+
+# A TLS for the running event loop, used by _get_running_loop.
+class _RunningLoop(threading.local):
+    _loop = []
+    _pid = None
+
+
+_running_loop = _RunningLoop()
+
+
+def _get_running_loop():
+    """Return the running event loop or None.
+
+    This is a low-level function intended to be used by event loops.
+    This function is thread-specific.
+    """
+    if _running_loop._pid == os.getpid():
+        if _running_loop._loop:
+            return _running_loop._loop[-1]
+        else:
+            return None
+
+
+def _push_running_loop(loop):
+    """Push a loop onto the running loop stack.
+
+    This is a low-level function intended to be used by event loops.
+    This function is thread-specific.
+    """
+    _running_loop._pid = os.getpid()
+    _running_loop._loop.append(loop)
+
+
+def _pop_running_loop():
+    """Pop a loop from the running loop stack.
+    Raises exception is there are not loops on the stack.
+    :return: The poppsed loop.
+    """
+    return _running_loop._loop.pop()
+
+
+def _init_event_loop_policy():
+    global _event_loop_policy
+    with _lock:
+        if _event_loop_policy is None:  # pragma: no branch
+            from . import DefaultEventLoopPolicy
+            _event_loop_policy = DefaultEventLoopPolicy()
+
+
+def get_event_loop_policy():
+    """Get the current event loop policy."""
+    if _event_loop_policy is None:
+        _init_event_loop_policy()
+    return _event_loop_policy
+
+
+def set_event_loop_policy(policy):
+    """Set the current event loop policy.
+
+    If policy is None, the default policy is restored."""
+    global _event_loop_policy
+    assert policy is None or isinstance(policy, AbstractEventLoopPolicy)
+    _event_loop_policy = policy
+
+
+def get_event_loop():
+    """Return an asyncio event loop.
+
+    When called from a coroutine or a callback (e.g. scheduled with call_soon
+    or similar API), this function will always return the running event loop.
+
+    If there is no running event loop set, the function will return
+    the result of `get_event_loop_policy().get_event_loop()` call.
+    """
+    current_loop = _get_running_loop()
+    if current_loop is not None:
+        return current_loop
+    return get_event_loop_policy().get_event_loop()
+
+
+def set_event_loop(loop):
+    """Equivalent to calling get_event_loop_policy().set_event_loop(loop)."""
+    get_event_loop_policy().set_event_loop(loop)
+
+
+def new_event_loop():
+    """Equivalent to calling get_event_loop_policy().new_event_loop()."""
+    return get_event_loop_policy().new_event_loop()

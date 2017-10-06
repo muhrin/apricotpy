@@ -1,199 +1,22 @@
-from abc import ABCMeta, abstractmethod
-from collections import deque
-import logging
 import heapq
 import itertools
+import logging
 import os
 import sys
-import time
 import threading
+import time
 import traceback
+from collections import deque
 
-from . import futures
+from apricotpy.events import AbstractEventLoop
 from . import events
+from . import futures
 from . import messages
 
 __all__ = ['BaseEventLoop']
 
 _LOGGER = logging.getLogger(__name__)
 _DEBUG_ENV_VAR = 'PYTHONAPRICOTDEBUG'
-
-
-class AbstractEventLoop(object):
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def create_future(self):
-        """
-
-        :return: A new future
-        :rtype: :class:`futures.Future`
-        """
-        pass
-
-    @abstractmethod
-    def run_forever(self):
-        pass
-
-    @abstractmethod
-    def run_until_complete(self, future):
-        pass
-
-    # region Callbacks
-    @abstractmethod
-    def call_soon(self, fn, *args):
-        pass
-
-    @abstractmethod
-    def call_later(self, delay, callback, *args):
-        """
-        Schedule callback to be called after the given `delay` in seconds.
-         
-        :param delay: The callback delay
-        :type delay: float
-        :param callback: The callback to call
-        :param args: The callback arguments
-        :return: A callback handle
-        :rtype: :class:`events.Handle`
-        """
-        pass
-
-    @abstractmethod
-    def call_at(self, when, callback, *args):
-        """
-        Schedule a callback to to be called at a given time
-
-        :param when: The time when to call
-        :type when: float
-        :param callback: The callback to call
-        :param args: The callback arguments
-        :return: A callback handle
-        :rtype: :class:`events.Handle`
-        """
-        pass
-
-    # endregion
-
-    @abstractmethod
-    def time(self):
-        pass
-
-    @abstractmethod
-    def messages(self):
-        pass
-
-    # region Objects
-    @abstractmethod
-    def get_object(self, uuid):
-        pass
-
-    @abstractmethod
-    def objects(self, obj_type=None):
-        """
-        Get the objects in the event loop.  Optionally filer for loop objects of
-        a given type.
-        
-        :param obj_type: The loop object class to filter for. 
-        :return: A list of the found objects.
-        """
-        pass
-
-    @abstractmethod
-    def create(self, object_type, *args, **kwargs):
-        """
-        Create a task and schedule it to be inserted into the loop.
-        
-        :param object_type: The task identifier 
-        :param args: (optional) positional arguments to the task
-        :param kwargs: (optional) keyword arguments to the task
-        
-        :return: The task object
-        """
-        pass
-
-    @abstractmethod
-    def create_inserted(self, object_type, *args, **kwargs):
-        """
-        Create a task and schedule it to be inserted into the loop.
-
-        :param object_type: The task identifier 
-        :param args: (optional) positional arguments to the task
-        :param kwargs: (optional) keyword arguments to the task
-
-        :return: The future corresponding to the insertion of the object into the loop
-        """
-        pass
-
-    @abstractmethod
-    def remove(self, loop_object):
-        """
-        Schedule an object to be removed an object from the event loop.
-
-        :param loop_object: The object to remove 
-        :return: A future corresponding to the removal of the object
-        """
-        pass
-
-    @abstractmethod
-    def set_object_factory(self, factory):
-        """
-        Set the factory used by :class:`AbstractEventLoop.create_task()`.
-        
-        If `None` then the default will be set.
-        
-        The factory should be a callabke with signature matching `(loop, task, *args, **kwargs)`
-        where task is some task identifier and positional and keyword arguments
-        can be supplied and it returns the :class:`Task` instance.
-        
-        :param factory: The task factory 
-        """
-        pass
-
-    @abstractmethod
-    def get_object_factory(self):
-        """
-        Get the task factory currently in use.  Returns `None` if the default is
-        being used.
-        
-        :return: The task factory
-        """
-        pass
-
-    # endregion
-
-    @abstractmethod
-    def close(self):
-        """Shutdown the event loop"""
-        pass
-
-    # region Error handlers
-    @abstractmethod
-    def get_exception_handler(self):
-        pass
-
-    @abstractmethod
-    def set_exception_handler(self, handler):
-        pass
-
-    @abstractmethod
-    def default_exception_handler(self, context):
-        pass
-
-    @abstractmethod
-    def call_exception_handler(self, context):
-        pass
-
-    # endregion
-
-    # region Debugging
-    @abstractmethod
-    def get_debug(self):
-        pass
-
-    @abstractmethod
-    def set_debug(self, enabled):
-        pass
-        # endregion
 
 
 class _CallbackLoop(object):
@@ -245,6 +68,22 @@ class _CallbackLoop(object):
         del self._scheduled[:]
 
 
+class _RunContext(object):
+    def __init__(self, loop):
+        self._loop = loop
+
+    def __enter__(self):
+        if self._loop.is_running():
+            raise RuntimeError('This event loop is already running')
+        self._thread_id = threading.current_thread().ident
+        events._push_running_loop(self)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._stopping = False
+        self._thread_id = None
+        assert events._pop_running_loop() is self
+
+
 class BaseEventLoop(AbstractEventLoop):
     def __init__(self, callback_loop=None):
         super(BaseEventLoop, self).__init__()
@@ -289,15 +128,12 @@ class BaseEventLoop(AbstractEventLoop):
         return futures.Future(self)
 
     def run_forever(self):
-        self._thread_id = threading.current_thread().ident
-
-        try:
-            while not self._stopping:
-                self._tick()
-
-        finally:
-            self._stopping = False
-            self._thread_id = None
+        with _RunContext(self):
+            try:
+                while not self._stopping:
+                    self._run_once()
+            finally:
+                self._stopping = False
 
     def run_until_complete(self, awaitable):
         """
@@ -310,6 +146,10 @@ class BaseEventLoop(AbstractEventLoop):
         if not awaitable.done():
             awaitable.add_done_callback(self._run_until_complete_cb)
             self.run_forever()
+
+        awaitable.remove_done_callback(self._run_until_complete_cb)
+        if not awaitable.done():
+            raise RuntimeError('Event loop stopped before Future completed.')
 
         return awaitable.result()
 
@@ -350,11 +190,8 @@ class BaseEventLoop(AbstractEventLoop):
         self._stopping = True
 
     def tick(self):
-        self._thread_id = threading.current_thread().ident
-        try:
-            self._tick()
-        finally:
-            self._thread_id = None
+        with _RunContext(self):
+            self._run_once()
 
     def time(self):
         return time.time()
@@ -525,7 +362,7 @@ class BaseEventLoop(AbstractEventLoop):
 
     # endregion
 
-    def _tick(self):
+    def _run_once(self):
         self._callback_loop._tick()
 
     def _run_until_complete_cb(self, fut):
