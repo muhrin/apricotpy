@@ -31,12 +31,11 @@ class PersistableFive(persistable.Task):
 class TestCaseWithPersistenceLoop(unittest.TestCase):
     def setUp(self):
         super(TestCaseWithPersistenceLoop, self).setUp()
-        self.loop = persistable.BaseEventLoop()
+        apricotpy.set_event_loop(persistable.BaseEventLoop())
+        self.loop = apricotpy.get_event_loop()
 
     def tearDown(self):
         super(TestCaseWithPersistenceLoop, self).tearDown()
-        self.loop.close()
-        self.loop = None
 
 
 class Obj(persistable.ContextMixin, persistable.LoopObject):
@@ -80,7 +79,7 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
 
     def test_save_load(self):
         value = 'persist *this*'
-        string = ~self.loop.create_inserted(PersistableValue, value)
+        string = PersistableValue(value)
         self.assertEqual(string.value, value)
 
         saved_state = persistable.Bundle(string)
@@ -93,15 +92,14 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
 
 
 class PersistableAwaitableFive(apricotpy.persistable.awaitable.AwaitableLoopObject):
-    def on_loop_inserted(self, loop):
-        super(PersistableAwaitableFive, self).on_loop_inserted(loop)
-        if not self.done():
-            self.loop().call_soon(self.set_result, 5)
+    def __init__(self, loop=None):
+        super(PersistableAwaitableFive, self).__init__(loop)
+        self.call_soon(self.set_result, 5)
 
 
 class TestPersistableAwaitable(TestCaseWithPersistenceLoop):
     def test_simple(self):
-        persistable_awaitable = ~self.loop.create_inserted(PersistableAwaitableFive)
+        persistable_awaitable = PersistableAwaitableFive()
 
         saved_state = persistable.Bundle(persistable_awaitable)
 
@@ -109,5 +107,3 @@ class TestPersistableAwaitable(TestCaseWithPersistenceLoop):
 
         persistable_awaitable = saved_state.unbundle(self.loop)
         self.loop.run_until_complete(persistable_awaitable)
-
-

@@ -1,23 +1,25 @@
 import abc
-import sys
-import traceback
 import uuid
 
+from . import events
 from . import futures
 
-__all__ = ['LoopObject',
-           'TickingMixin',
-           'TickingLoopObject',
-           'AwaitableMixin']
+__all__ = ['LoopObject', 'TickingMixin',
+           'TickingLoopObject', 'AwaitableMixin']
 
 
 class LoopObject(object):
-    def __init__(self):
+    def __init__(self, loop=None):
         super(LoopObject, self).__init__()
 
+        if loop is None:
+            self._loop = events.get_event_loop()
+        else:
+            self._loop = loop
         self._uuid = uuid.uuid4()
-        self._loop = None
         self._loop_callback = None
+
+        self._loop._insert(self)
 
     @property
     def uuid(self):
@@ -83,9 +85,9 @@ class TickingMixin(object):
     """
     __metaclass__ = abc.ABCMeta
 
-    def on_loop_inserted(self, loop):
-        super(TickingMixin, self).on_loop_inserted(loop)
-        self._callback_handle = loop.call_soon(self._tick)
+    def __init__(self, *args, **kwargs):
+        super(TickingMixin, self).__init__(*args, **kwargs)
+        self._callback_handle = self.loop().call_soon(self._tick)
 
     @abc.abstractmethod
     def tick(self):
@@ -114,20 +116,10 @@ class AwaitableMixin(futures.Awaitable):
     def __init__(self, *args, **kwargs):
         assert isinstance(self, LoopObject), "Must be used with a loop object"
         super(AwaitableMixin, self).__init__(*args, **kwargs)
-        self._future = futures._FutureBase()
-        self._callbacks = []
+        self._future = futures.Future(loop=kwargs.get('loop', None))
 
     def __invert__(self):
-        self._check_inserted()
         return self._loop.run_until_complete(self)
-
-    def on_loop_inserted(self, loop):
-        super(AwaitableMixin, self).on_loop_inserted(loop)
-        if not self._loop.get_debug():
-            self._source_traceback = None
-
-        if self.done():
-            self._schedule_callbacks()
 
     def done(self):
         return self._future.done()
@@ -137,24 +129,15 @@ class AwaitableMixin(futures.Awaitable):
 
     def set_result(self, result):
         self._future.set_result(result)
-        if self.in_loop():
-            self._schedule_callbacks()
-            self.loop().remove(self)
 
     def exception(self):
         return self._future.exception()
 
     def set_exception(self, exception):
         self._future.set_exception(exception)
-        if self.in_loop():
-            self._schedule_callbacks()
-            self.loop().remove(self)
 
     def cancel(self):
         self._future.cancel()
-        if self.in_loop():
-            self._schedule_callbacks()
-            self.loop().remove(self)
 
     def cancelled(self):
         return self._future.cancelled()
@@ -165,10 +148,7 @@ class AwaitableMixin(futures.Awaitable):
 
         :param fn: The callback function.
         """
-        if self.in_loop() and self.done():
-            self.loop().call_soon(fn, self)
-        else:
-            self._callbacks.append(fn)
+        self._future.add_done_callback(fn)
 
     def remove_done_callback(self, fn):
         """
@@ -177,27 +157,4 @@ class AwaitableMixin(futures.Awaitable):
         :return: The number of callback instances removed
         :rtype: int
         """
-        filtered_callbacks = [f for f in self._callbacks if f != fn]
-        removed_count = len(self._callbacks) - len(filtered_callbacks)
-        if removed_count:
-            self._callbacks[:] = filtered_callbacks
-
-        return removed_count
-
-    def _schedule_callbacks(self):
-        """
-        Ask the event loop to call all callbacks.
-
-        The callbacks are scheduled to be called as soon as possible.
-        """
-        callbacks = self._callbacks[:]
-        if not callbacks:
-            return
-
-        self._callbacks[:] = []
-        for callback in callbacks:
-            self.loop().call_soon(callback, self)
-
-    def _check_inserted(self):
-        assert self.loop() is not None, \
-            "Awaitable has not been inserted into the loop yet"
+        self._future.remove_done_callback(fn)

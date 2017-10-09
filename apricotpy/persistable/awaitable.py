@@ -1,5 +1,5 @@
 import apricotpy
-from . import events
+from . import futures
 from . import objects
 
 __all__ = ['AwaitableLoopObject']
@@ -7,36 +7,25 @@ __all__ = ['AwaitableLoopObject']
 
 class MakeAwaitableMixinPersistable(object):
     """
-    Take a :class:`apricotpy.AwaitableMixin` and make it :class:`core.LoopPersistable` 
+    Take a :class:`apricotpy.AwaitableMixin` and make it :class:`core.LoopPersistable`
     """
-
-    STATE = 'STATE'
-    RESULT = 'RESULT'
-    EXCEPTION = 'EXCEPTION'
-    CALLBACKS = 'CALLBACKS'
+    FUTURE = 'FUTURE'
 
     def __init__(self, *args, **kwargs):
-        assert isinstance(self, apricotpy.AwaitableMixin), "Has to be used with an AwaitableMixin"
+        assert isinstance(self, apricotpy.AwaitableMixin), \
+            "Has to be used with an AwaitableMixin"
         super(MakeAwaitableMixinPersistable, self).__init__(*args, **kwargs)
+        self._future = futures.Future(loop=kwargs.get('loop', None))
 
     def save_instance_state(self, out_state):
         super(MakeAwaitableMixinPersistable, self).save_instance_state(out_state)
 
-        out_state[self.STATE] = self._future._state
-        out_state[self.RESULT] = self._future._result
-        out_state[self.EXCEPTION] = self._future._exception
-        out_state[self.CALLBACKS] = tuple(self._callbacks)
+        out_state[self.FUTURE] = self._future
 
     def load_instance_state(self, saved_state):
         super(MakeAwaitableMixinPersistable, self).load_instance_state(saved_state)
 
-        fut = apricotpy.futures._FutureBase()
-        fut._state = saved_state[self.STATE]
-        fut._result = saved_state[self.RESULT]
-        fut._exception = saved_state[self.EXCEPTION]
-        self._future = fut
-
-        self._callbacks = list(saved_state[self.CALLBACKS])
+        self._future = saved_state[self.FUTURE]
 
 
 class AwaitableMixin(MakeAwaitableMixinPersistable, apricotpy.AwaitableMixin):

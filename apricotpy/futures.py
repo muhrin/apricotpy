@@ -52,61 +52,6 @@ class Awaitable(object):
         pass
 
 
-class _FutureBase(object):
-    # Class variables serving as defaults for instance variables.
-    _state = _PENDING
-    _result = None
-    _exception = None
-
-    def __init__(self):
-        self._callbacks = []
-
-    def cancel(self):
-        if self.done():
-            return False
-
-        self._state = _CANCELLED
-        return True
-
-    def cancelled(self):
-        return self._state is _CANCELLED
-
-    def done(self):
-        return self._state != _PENDING
-
-    def result(self):
-        if self.cancelled():
-            raise CancelledError()
-        elif self._state is not _FINISHED:
-            raise InvalidStateError("The future has not completed yet")
-        elif self._exception is not None:
-            raise self._exception
-
-        return self._result
-
-    def set_result(self, result):
-        if self.done():
-            raise InvalidStateError("The future is already done")
-
-        self._result = result
-        self._state = _FINISHED
-
-    def set_exception(self, exception):
-        if self.done():
-            raise InvalidStateError("The future is already done")
-
-        self._exception = exception
-        self._state = _FINISHED
-
-    def exception(self):
-        if self.cancelled():
-            raise CancelledError()
-        if self._state is not _FINISHED:
-            raise InvalidStateError("Exception not set")
-
-        return self._exception
-
-
 class Future(Awaitable):
     # Class variables serving as defaults for instance variables.
     _state = _PENDING

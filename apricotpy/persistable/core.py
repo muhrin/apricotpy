@@ -50,7 +50,8 @@ class LoopPersistable(object):
 
 class _Reference(collections.Hashable):
     def __init__(self, obj):
-        assert isinstance(obj, LoopPersistable), "Can only refer to loop persistables"
+        assert isinstance(obj, LoopPersistable), \
+            "Can only refer to loop persistables, got '{}".format(obj)
         self.id = obj.persistable_id
 
     def __hash__(self):

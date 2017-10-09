@@ -76,12 +76,12 @@ class _RunContext(object):
         if self._loop.is_running():
             raise RuntimeError('This event loop is already running')
         self._thread_id = threading.current_thread().ident
-        events._push_running_loop(self)
+        events._push_running_loop(self._loop)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._stopping = False
         self._thread_id = None
-        assert events._pop_running_loop() is self
+        assert events._pop_running_loop() is self._loop
 
 
 class BaseEventLoop(AbstractEventLoop):
@@ -201,6 +201,7 @@ class BaseEventLoop(AbstractEventLoop):
 
     # region Objects
     def create(self, object_type, *args, **kwargs):
+        kwargs['loop'] = self
         loop_object = self._create(object_type, *args, **kwargs)
 
         self.insert(loop_object)

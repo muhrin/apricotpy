@@ -16,12 +16,15 @@ class PersistableLoopObjectMixin(core.LoopPersistable):
     Because this is a mixin in can be inserted an any point in the inheritance hierarchy.
     """
     IN_LOOP = 'IN_LOOP'
+    CALLBACKS = 'CALLBACKS'
     LOOP_CALLBACK = 'LOOP_CALLBACK'
     UUID = 'UUID'
 
     def __init__(self, *args, **kwargs):
         assert isinstance(self, objects.LoopObject), "Has to be used with a LoopObject"
         super(PersistableLoopObjectMixin, self).__init__(*args, **kwargs)
+
+        self._callbacks = []
 
     @property
     def persistable_id(self):
@@ -31,17 +34,28 @@ class PersistableLoopObjectMixin(core.LoopPersistable):
         super(PersistableLoopObjectMixin, self).save_instance_state(out_state)
 
         out_state[self.UUID] = self.uuid
-        out_state[self.LOOP_CALLBACK] = self._loop_callback
+        out_state[self.CALLBACKS] = tuple(self._callbacks)
 
     def load_instance_state(self, saved_state):
         super(PersistableLoopObjectMixin, self).load_instance_state(saved_state)
 
         self._loop = saved_state.loop()
         self._uuid = saved_state[self.UUID]
-        self._loop_callback = saved_state[self.LOOP_CALLBACK]
+        self._callbacks = list(saved_state[self.CALLBACKS])
 
-        if self._loop is not None:
-            self._loop._insert_object(self)
+        self._loop._insert_object(self)
+
+    def call_soon(self, fn, *args, **kwargs):
+        self.persist_callback(
+            self.loop().call_soon(fn, *args, **kwargs)
+        )
+
+    def persist_callback(self, handle):
+        self._callbacks.append(handle)
+        handle.add_done_callback(self._callback_done)
+
+    def _callback_done(self, handle):
+        self._callbacks.remove(handle)
 
 
 class LoopObject(apricotpy.LoopObject, PersistableLoopObjectMixin):

@@ -36,8 +36,8 @@ class TaskMixin(objects.AwaitableMixin):
 
     Terminated = namedtuple("Terminated", ['result'])
 
-    def __init__(self):
-        super(TaskMixin, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(TaskMixin, self).__init__(*args, **kwargs)
 
         self._awaiting = None
         self._next_step = None
@@ -46,24 +46,14 @@ class TaskMixin(objects.AwaitableMixin):
         self._paused = False
         self._callback_handle = None
 
+        self._schedule_step()
+
     def awaiting(self):
         """
         :return: The awaitable this task is awaiting, or None
         :rtype: :class:`apricotpy.Awaitable` or None
         """
         return self._awaiting
-
-    def on_loop_inserted(self, loop):
-        super(TaskMixin, self).on_loop_inserted(loop)
-        if not self.done() and self.is_playing():
-            self._schedule_step()
-
-    def on_loop_removed(self):
-        super(TaskMixin, self).on_loop_removed()
-        if self._callback_handle is not None:
-            self._callback_handle.cancel()
-        if self._awaiting is not None:
-            self._awaiting.remove_done_callback(self._await_done)
 
     def play(self):
         """
