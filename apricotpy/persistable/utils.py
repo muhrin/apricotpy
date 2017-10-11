@@ -18,6 +18,24 @@ class UuidMixin(object):
 class ClassNotFoundException(Exception):
     pass
 
+class ClassLoader(object):
+    def __init__(self, parent=None):
+        self._parent = parent
+
+    def find_class(self, name):
+        """
+        Load a class from a string
+        """
+        return load_object(name)
+
+    def load_class(self, name):
+        # Try the parent first
+        if self._parent is not None:
+            Class = self._parent.find_class(name)
+            if Class is not None:
+                return Class
+
+        return self.find_class(name)
 
 def function_name(fn):
     if inspect.ismethod(fn):
@@ -50,7 +68,7 @@ def load_function(name, instance=None):
         raise ValueError("Invalid function name '{}'".format(name))
 
 
-def class_name(obj):
+def class_name(obj, class_loader=None):
     """
     Given a class or an instance this function will give the fully qualified name
     e.g. 'my_module.MyClass'
@@ -66,7 +84,10 @@ def class_name(obj):
     name = obj.__module__ + '.' + obj.__name__
 
     try:
-        load_object(name)
+        if class_loader is not None:
+            class_loader.load_class(name)
+        else:
+            load_object(name)
     except ValueError:
         raise ValueError("Could not create a consistent full name for object '{}'".format(obj))
 

@@ -34,4 +34,4 @@ class ContextMixin(object):
     def load_instance_state(self, saved_state):
         super(ContextMixin, self).load_instance_state(saved_state)
 
-        self._context = apricotpy.utils.SimpleNamespace(**saved_state[self.CONTEXT])
+        self._context = apricotpy.utils.AttributesDict(**saved_state[self.CONTEXT])

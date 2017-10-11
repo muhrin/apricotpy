@@ -1,5 +1,4 @@
 import logging
-
 import apricotpy
 from apricotpy import objects
 from . import core

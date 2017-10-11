@@ -34,8 +34,8 @@ class MakeAwaitableMixinPersistable(object):
         fut._state = saved_state[self.STATE]
         fut._result = saved_state[self.RESULT]
         fut._exception = saved_state[self.EXCEPTION]
-        self._future = fut
 
+        self._future = fut
         self._callbacks = list(saved_state[self.CALLBACKS])
 
 
@@ -43,9 +43,7 @@ class AwaitableMixin(MakeAwaitableMixinPersistable, apricotpy.AwaitableMixin):
     pass
 
 
-class AwaitableLoopObject(
-    AwaitableMixin,
-    objects.LoopObject):  # Start as a persistable LoopObject
+class AwaitableLoopObject(AwaitableMixin, objects.LoopObject): # Start as a persistable LoopObject
     """
     A convenience class that gives a LoopObject that is both LoopPersistable and
     Awaitable.
