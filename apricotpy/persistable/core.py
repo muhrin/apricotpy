@@ -10,6 +10,7 @@ __all__ = ['LoopPersistable', 'Bundle', 'Unbundler']
 
 _LOGGER = logging.getLogger(__name__)
 _NULL = tuple()
+_KEY_CLASS_LOADER = 'class_loader'
 
 
 class LoopPersistable(object):
@@ -72,9 +73,10 @@ class Bundle(dict):
     which will trigger any child persistables to also be saved.
     """
 
-    def __init__(self, persistable, bundles=None):
+    def __init__(self, persistable, bundles=None, class_loader=None):
         super(Bundle, self).__init__()
-        self._class_name = utils.class_name(persistable)
+        self.set_class_loader(class_loader)
+        self._class_name = utils.class_name(persistable, class_loader)
         self._id = _Reference(persistable)
 
         if persistable.loop() is None:
@@ -96,6 +98,9 @@ class Bundle(dict):
         persistable.save_instance_state(self)
 
         _LOGGER.debug("Bundling {}".format(self))
+
+    def __getitem__(self, item):
+        return super(Bundle, self).__getitem__(item)
 
     def __setitem__(self, key, value):
         if key in self:
@@ -120,8 +125,13 @@ class Bundle(dict):
 
     @property
     def loop_ref(self):
-        """ The reference to the loop this persistable is in """
+        """
+        The reference to the loop this persistable is in
+        """
         return self._loop_ref
+
+    def set_class_loader(self, class_loader):
+        self._class_loader = class_loader
 
     def unbundle(self, loop):
         """
@@ -172,11 +182,11 @@ class Bundle(dict):
     def _ensure_bundle(self, persistable):
         ref = _Reference(persistable)
         if ref not in self._bundles:
-            self._bundles[ref] = Bundle(persistable, self._bundles)
+            self._bundles[ref] = Bundle(persistable, self._bundles, self._class_loader)
         return ref
 
 
-class Unbundler(object):
+class Unbundler(collections.Mapping):
     """
     The unbundler provides a readonly view of a bundle that is used while a 
     persistable is reloading its state.
@@ -206,7 +216,7 @@ class Unbundler(object):
             _LOGGER.debug("Unbundling {}".format(self._bundle))
 
             # Get the class using the class loader and instantiate it
-            persistable_class = utils.load_object(self._bundle.class_name)
+            persistable_class = self._bundle._class_loader.load_class(self._bundle.class_name)
             persistable = persistable_class.__new__(persistable_class)
 
             # Have to put it in the persistables dictionary here as it may be accessed
@@ -220,8 +230,17 @@ class Unbundler(object):
 
         return self._unbundled
 
+    def __iter__(self):
+        return self._bundle.__iter__()
+
+    def __len__(self):
+        return self._bundle.__len__()
+
     def __getitem__(self, item):
         return self.decode(self._bundle[item])
+
+    def __contains__(self, item):
+        return self._bundle.__contains__(item)
 
     @property
     def loop_ref(self):

@@ -43,8 +43,19 @@ class _CallbackLoop(object):
             handle = self._ready.popleft()
             if handle._cancelled:
                 continue
-
-            handle._run()
+            if self._event_loop.get_debug():
+                try:
+                    self._current_handle = handle
+                    t0 = self._event_loop.time()
+                    handle._run()
+                    dt = self._event_loop.time() - t0
+                    if dt >= self._event_loop.slow_callback_duration:
+                        _LOGGER.warning('Executing %s took %.3f seconds',
+                                        handle, dt)
+                finally:
+                    self._current_handle = None
+            else:
+                handle._run()
 
     def call_soon(self, fn, *args):
         handle = events.Handle(fn, args, self._event_loop)
@@ -101,6 +112,7 @@ class BaseEventLoop(AbstractEventLoop):
         self._exception_handler = None
         self.set_debug((not sys.flags.ignore_environment
                         and bool(os.environ.get(_DEBUG_ENV_VAR))))
+        self.slow_callback_duration = 0.1
         self._current_handle = None
 
         self.__mailman = messages.Mailman(self)
@@ -278,7 +290,11 @@ class BaseEventLoop(AbstractEventLoop):
 
         exception = context.get('exception')
         if exception is not None:
-            exc_info = (type(exception), exception, exception.__traceback__)
+            try:
+                tb = exception.__traceback__
+            except AttributeError:
+                tb = None
+            exc_info = (type(exception), exception, tb)
         else:
             exc_info = False
 

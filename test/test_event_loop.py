@@ -49,3 +49,25 @@ class TestEventLoop(unittest.TestCase):
 
         self.assertEqual(result['subject'], 'loop.object.{}.created'.format(obj.uuid))
         self.assertEqual(result['body'], obj.uuid)
+
+    def test_default_error_handler(self):
+        # Now try a context with a traceback
+        try:
+            raise RuntimeError('Test error!')
+        except RuntimeError as e:
+            context = {
+                'message': e.message,
+                'exception': e,
+            }
+            self.loop.default_exception_handler(context)
+
+    def test_default_error_handler_with_traceback(self):
+        try:
+            raise RuntimeError('Test error!')
+        except RuntimeError as e:
+            e.__traceback__ = None
+            context = {
+                'message': e.message,
+                'exception': e,
+            }
+            self.loop.default_exception_handler(context)
