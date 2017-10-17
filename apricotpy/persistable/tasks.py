@@ -1,4 +1,6 @@
-from abc import ABCMeta
+import abc
+
+from future.utils import with_metaclass
 
 import apricotpy.tasks
 from . import awaitable
@@ -9,11 +11,11 @@ _NO_RESULT = apricotpy.tasks._NO_RESULT
 __all__ = ['Task']
 
 
-class Task(
+class Task(with_metaclass(
+    abc.ABCMeta,
     awaitable.MakeAwaitableMixinPersistable,  # make Awaitable also LoopPersistable
     apricotpy.tasks.TaskMixin,
-    objects.LoopObject):
-    __metaclass__ = ABCMeta
+    objects.LoopObject)):
 
     AWAITING = 'AWAITING'
     AWAITING_RESULT = 'AWAITING_RESULT'

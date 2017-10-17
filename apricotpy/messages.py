@@ -2,17 +2,19 @@ from collections import namedtuple
 import threading
 import re
 
+from past.builtins import basestring
+
 _WilcardEntry = namedtuple("_WildcardEntry", ['re', 'listeners'])
 
 
 class Mailman(object):
     """
     A class to send messages to listeners
-    
+
     Messages send by this class:
     * mailman.listener_added.[subject]
     * mailman.listener_removed.[subject]
-    
+
     where subject is the subject the listener is listening for
     """
 
@@ -22,7 +24,7 @@ class Mailman(object):
         Does the event string contain a wildcard.
 
         :param event: The event string
-        :type event: str or unicode
+        :type event: basestring
         :return: True if it does, False otherwise
         """
         return event.find('*') != -1 or event.find('#') != -1
@@ -45,7 +47,7 @@ class Mailman(object):
         :param listener: The listener callback function to call when the
             event happens
         :param subject: A subject string
-        :type subject: str or unicode
+        :type subject: basestring
         """
         if subject is None:
             raise ValueError("Invalid event '{}'".format(subject))
@@ -64,14 +66,14 @@ class Mailman(object):
 
         :param listener: The listener that is currently listening
         :param subject: (optional) subject to stop listening for
-        :type subject: str or unicode
+        :type subject: basestring
         """
         with self._listeners_lock:
             if subject is None:
                 # This means remove ALL messages for this listener
-                for evt in self._specific_listeners.keys():
+                for evt in list(self._specific_listeners.keys()):
                     self._remove_specific_listener(listener, evt)
-                for evt in self._wildcard_listeners.keys():
+                for evt in list(self._wildcard_listeners.keys()):
                     self._remove_wildcard_listener(listener, evt)
             else:
                 if self.contains_wildcard(subject):
@@ -101,19 +103,19 @@ class Mailman(object):
         """
         with self._listeners_lock:
             total = 0
-            for listeners in self._specific_listeners.itervalues():
+            for listeners in self._specific_listeners.values():
                 total += len(listeners)
-            for entry in self._wildcard_listeners.itervalues():
+            for entry in self._wildcard_listeners.values():
                 total += len(entry.listeners)
             return total
 
     def send(self, subject, body=None, sender_id=None):
         """
         Send a message
-        
-        :param subject: The message subject 
+
+        :param subject: The message subject
         :param body: The body of the message
-        :param sender_id: An identifier for the sender, if LoopObject this will 
+        :param sender_id: An identifier for the sender, if LoopObject this will
             be the UUID.
         """
         # These loops need to use copies because, e.g., the recipient may
