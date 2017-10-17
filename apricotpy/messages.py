@@ -71,9 +71,9 @@ class Mailman(object):
         with self._listeners_lock:
             if subject is None:
                 # This means remove ALL messages for this listener
-                for evt in self._specific_listeners.keys():
+                for evt in list(self._specific_listeners.keys()):
                     self._remove_specific_listener(listener, evt)
-                for evt in self._wildcard_listeners.keys():
+                for evt in list(self._wildcard_listeners.keys()):
                     self._remove_wildcard_listener(listener, evt)
             else:
                 if self.contains_wildcard(subject):
@@ -103,9 +103,9 @@ class Mailman(object):
         """
         with self._listeners_lock:
             total = 0
-            for listeners in self._specific_listeners.itervalues():
+            for listeners in self._specific_listeners.values():
                 total += len(listeners)
-            for entry in self._wildcard_listeners.itervalues():
+            for entry in self._wildcard_listeners.values():
                 total += len(entry.listeners)
             return total
 
