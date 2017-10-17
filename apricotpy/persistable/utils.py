@@ -4,6 +4,7 @@ import importlib
 import inspect
 import uuid
 
+from past.builtins import basestring
 
 class UuidMixin(object):
     def __init__(self, *args, **kwargs):
@@ -150,10 +151,10 @@ def is_sequence_not_str(value):
     """
     A helper to check if a value is of type :class:`collections.Sequence`
     but not a string type (i.e. :class:`str` or :class:`unicode`)
-    
-    :param value: The value to check 
+
+    :param value: The value to check
     :return: True of a sequence but not string, False otherwise
     :rtype: bool
     """
     return isinstance(value, collections.Sequence) and \
-           not isinstance(value, (str, unicode))
+           not isinstance(value, basestring)

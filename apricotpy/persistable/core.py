@@ -4,6 +4,10 @@ import collections
 import inspect
 import logging
 import uuid
+
+from past.builtins import basestring
+from future.utils import with_metaclass
+
 from . import utils
 
 __all__ = ['LoopPersistable', 'Bundle', 'Unbundler']
@@ -13,11 +17,10 @@ _NULL = tuple()
 _KEY_CLASS_LOADER = 'class_loader'
 
 
-class LoopPersistable(object):
+class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     """
     An abstract class that defines objects that are persistable.
     """
-    __metaclass__ = abc.ABCMeta
 
     # Class variables serving as defaults for instance variables.
     _persistable_id = None
@@ -27,11 +30,11 @@ class LoopPersistable(object):
         """
         Overwrite this if you want to provide your own persistable ID, e.g.
         because you already have a UUID.
-        
+
         Be careful though, this ID should be a unique type that identifies this
         _instance_!  And must be of a type that can be saved in :class:`Bundle`
-        
-        :return: A persistable id that identifies this instance 
+
+        :return: A persistable id that identifies this instance
         """
         if self._persistable_id is None:
             self._persistable_id = uuid.uuid4()
@@ -68,7 +71,7 @@ class _Reference(collections.Hashable):
 class Bundle(dict):
     """
     This object represents the persisted state of a :class:`LoopPersistable` object.
-    
+
     When instantiating it will ask the persistable to save its instance state
     which will trigger any child persistables to also be saved.
     """
@@ -160,7 +163,7 @@ class Bundle(dict):
                 raise ValueError("Unsupported sequence type ({}), use a tuple".format(type(value)))
 
         if isinstance(value, dict):
-            return {k: self._encode(item) for k, item in value.iteritems()}
+            return {k: self._encode(item) for k, item in value.items()}
 
         if inspect.isfunction(value) or inspect.ismethod(value):
             from .persistables import Function
@@ -168,7 +171,7 @@ class Bundle(dict):
             fn_obj = Function(value)
             return self._ensure_bundle(fn_obj)
 
-        if isinstance(value, (int, float, str, unicode, uuid.UUID)):
+        if isinstance(value, (int, float, basestring, uuid.UUID)):
             return value
 
         if isinstance(value, BaseException):
@@ -204,7 +207,7 @@ class Bundle(dict):
 
 class Unbundler(collections.Mapping):
     """
-    The unbundler provides a readonly view of a bundle that is used while a 
+    The unbundler provides a readonly view of a bundle that is used while a
     persistable is reloading its state.
     """
 
@@ -285,7 +288,7 @@ class Unbundler(collections.Mapping):
             return tuple(self.decode(item) for item in value)
 
         if isinstance(value, dict):
-            return {k: self.decode(item) for k, item in value.iteritems()}
+            return {k: self.decode(item) for k, item in value.items()}
 
         return value
 

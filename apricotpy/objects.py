@@ -3,6 +3,8 @@ import sys
 import traceback
 import uuid
 
+from future.utils import with_metaclass 
+
 from . import futures
 
 __all__ = ['LoopObject',
@@ -71,17 +73,16 @@ class LoopObject(object):
     def send_message(self, subject, body=None):
         """
         Send a message from this object.  The UUID will automatically be used
-        as the sender id. 
+        as the sender id.
         """
         self.loop().messages().send(subject, body, self.uuid)
 
 
-class TickingMixin(object):
+class TickingMixin(with_metaclass(abc.ABCMeta, object)):
     """
     A mixin that makes a LoopObject be 'ticked' each time around the event
     loop.  The user code should go in the `tick()` function.
     """
-    __metaclass__ = abc.ABCMeta
 
     def on_loop_inserted(self, loop):
         super(TickingMixin, self).on_loop_inserted(loop)
