@@ -58,7 +58,7 @@ class _Reference(collections.Hashable):
         return hash(self.id)
 
     def __eq__(self, other):
-        return self.id == other
+        return self.id == other.id
 
     def __repr__(self):
         return "<Reference {}>".format(self.id)
