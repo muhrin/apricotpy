@@ -101,6 +101,10 @@ class Bundle(dict):
         _LOGGER.debug("Bundling {}".format(self))
 
     def __getitem__(self, item):
+        if not isinstance(item, str):
+            raise TypeError(
+                "Keys must be strings or enum constants, got '{}'".format(type(item))
+            )
         return super(Bundle, self).__getitem__(item)
 
     def __setitem__(self, key, value):
@@ -201,7 +205,6 @@ class Bundle(dict):
             return utils.load_object(cls)
 
 
-
 class Unbundler(collections.Mapping):
     """
     The unbundler provides a readonly view of a bundle that is used while a 
@@ -253,6 +256,10 @@ class Unbundler(collections.Mapping):
         return self._bundle.__len__()
 
     def __getitem__(self, item):
+        if not isinstance(item, str):
+            raise TypeError(
+                "Keys must be strings or enum constants, got '{}'".format(type(item))
+            )
         return self.decode(self._bundle[item])
 
     def __contains__(self, item):
