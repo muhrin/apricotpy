@@ -39,13 +39,16 @@ class ClassLoader(object):
         return self.find_class(name)
 
 def function_name(fn):
-    if inspect.ismethod(fn):
-        cls = fn.__self__.__class__
-        name = class_name(cls) + '.' + fn.__name__
-    elif inspect.isfunction(fn):
-        name = fn.__module__ + '.' + fn.__name__
-    else:
-        raise ValueError("Must be function or method")
+    try:
+        name = fn.__module__ + '.' + fn.__qualname__
+    except AttributeError:
+        if inspect.ismethod(fn):
+            cls = fn.__self__.__class__
+            name = class_name(cls) + '.' + fn.__name__
+        elif inspect.isfunction(fn):
+            name = fn.__module__ + '.' + fn.__name__
+        else:
+            raise ValueError("Must be function or method")
 
     # Make sure we can load it
     try:
