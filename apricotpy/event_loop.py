@@ -182,13 +182,6 @@ class BaseEventLoop(AbstractEventLoop):
     def call_at(self, when, callback, *args):
         return self._callback_loop.call_at(when, callback, *args)
 
-    def objects(self, obj_type=None):
-        # Filter the type if necessary
-        if obj_type is not None:
-            return [obj for obj in self._objects.values() if isinstance(obj, obj_type)]
-        else:
-            return self._objects.values()
-
     def get_object(self, uuid):
         try:
             return self._objects[uuid]

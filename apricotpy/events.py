@@ -258,17 +258,6 @@ class AbstractEventLoop(object):
         pass
 
     @abc.abstractmethod
-    def objects(self, obj_type=None):
-        """
-        Get the objects in the event loop.  Optionally filer for loop objects of
-        a given type.
-
-        :param obj_type: The loop object class to filter for. 
-        :return: A list of the found objects.
-        """
-        pass
-
-    @abc.abstractmethod
     def create(self, object_type, *args, **kwargs):
         """
         Create a task and schedule it to be inserted into the loop.
