@@ -15,6 +15,10 @@ class LoopStackTester(apricotpy.Task):
 
 
 class TestDefaultLoop(unittest.TestCase):
+    def setUp(self):
+        super(TestDefaultLoop, self).setUp()
+        apricotpy.set_event_loop(apricotpy.get_event_loop_policy().new_event_loop())
+
     def test_default(self):
         self.assertIsNotNone(apricotpy.get_event_loop())
         self.assertIsNotNone(apricotpy.get_event_loop_policy())

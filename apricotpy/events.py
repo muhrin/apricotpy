@@ -189,7 +189,8 @@ class TimerHandle(Handle):
         return NotImplemented if equal is NotImplemented else not equal
 
 
-class AbstractEventLoop(with_metaclass(abc.ABCMeta, object)):
+class AbstractEventLoop(object):
+    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def create_future(self):
@@ -262,7 +263,7 @@ class AbstractEventLoop(with_metaclass(abc.ABCMeta, object)):
         Get the objects in the event loop.  Optionally filer for loop objects of
         a given type.
 
-        :param obj_type: The loop object class to filter for.
+        :param obj_type: The loop object class to filter for. 
         :return: A list of the found objects.
         """
         pass
@@ -272,34 +273,11 @@ class AbstractEventLoop(with_metaclass(abc.ABCMeta, object)):
         """
         Create a task and schedule it to be inserted into the loop.
 
-        :param object_type: The task identifier
+        :param object_type: The task identifier 
         :param args: (optional) positional arguments to the task
         :param kwargs: (optional) keyword arguments to the task
 
         :return: The task object
-        """
-        pass
-
-    @abc.abstractmethod
-    def create_inserted(self, object_type, *args, **kwargs):
-        """
-        Create a task and schedule it to be inserted into the loop.
-
-        :param object_type: The task identifier
-        :param args: (optional) positional arguments to the task
-        :param kwargs: (optional) keyword arguments to the task
-
-        :return: The future corresponding to the insertion of the object into the loop
-        """
-        pass
-
-    @abc.abstractmethod
-    def remove(self, loop_object):
-        """
-        Schedule an object to be removed an object from the event loop.
-
-        :param loop_object: The object to remove
-        :return: A future corresponding to the removal of the object
         """
         pass
 
@@ -314,7 +292,7 @@ class AbstractEventLoop(with_metaclass(abc.ABCMeta, object)):
         where task is some task identifier and positional and keyword arguments
         can be supplied and it returns the :class:`Task` instance.
 
-        :param factory: The task factory
+        :param factory: The task factory 
         """
         pass
 

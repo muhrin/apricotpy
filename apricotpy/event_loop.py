@@ -214,22 +214,7 @@ class BaseEventLoop(AbstractEventLoop):
     # region Objects
     def create(self, object_type, *args, **kwargs):
         kwargs['loop'] = self
-        loop_object = self._create(object_type, *args, **kwargs)
-
-        self.insert(loop_object)
-        return loop_object
-
-    def create_inserted(self, object_type, *args, **kwargs):
-        loop_object = self._create(object_type, *args, **kwargs)
-        return self.insert(loop_object)
-
-    def insert(self, loop_object):
-        self.messages().send("loop.object.{}.inserting".format(loop_object.uuid), loop_object.uuid)
-        return loop_object.insert_into(self)
-
-    def remove(self, loop_object):
-        self.messages().send("loop.object.{}.removing".format(loop_object.uuid), loop_object.uuid)
-        return loop_object.remove(self)
+        return self._create(object_type, *args, **kwargs)
 
     def set_object_factory(self, factory):
         self._object_factory = factory
@@ -392,43 +377,9 @@ class BaseEventLoop(AbstractEventLoop):
             obj = self._object_factory(self, object_type, *args, **kwargs)
 
         uuid = obj.uuid
-        # self._objects[uuid] = obj
         self.messages().send("loop.object.{}.created".format(uuid), uuid)
 
         return obj
-
-    def _insert(self, obj, fut=None):
-        uuid = obj.uuid
-        self._objects[uuid] = obj
-        obj.on_loop_inserted(self)
-        if fut is not None:
-            fut.set_result(obj)
-        self.messages().send("loop.object.{}.inserted".format(uuid), uuid)
-
-    def _remove(self, obj, fut):
-        uuid = obj.uuid
-        try:
-            assert obj is self._objects[obj.uuid], "Asked to remove different object with same uuid!"
-        except KeyError:
-            fut.set_exception(ValueError("Unknown uuid '{}', object='{}'".format(uuid, obj.__class__.__name__)))
-        except BaseException as e:
-            fut.set_exception(e)
-        else:
-            obj.on_loop_removed()
-
-            # Cancel any callbacks to the object
-            for cb in itertools.chain(self._callback_loop._ready, self._callback_loop._scheduled):
-                try:
-                    if cb._fn.__self__ is obj:
-                        cb.cancel()
-                        _LOGGER.info("Cancelled callback to '{}' because the loop "
-                                     "object was removed".format(cb._fn))
-                except AttributeError:
-                    pass
-
-            self._objects.pop(uuid)
-            fut.set_result(uuid)
-            self.messages().send("loop.object.{}.removed".format(uuid), uuid)
 
     def _create_handle(self, fn, args):
         return events.Handle(fn, args, self)

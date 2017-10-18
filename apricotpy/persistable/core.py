@@ -21,6 +21,7 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     """
     An abstract class that defines objects that are persistable.
     """
+    SCHEDULED_CALLBACKS = 'SCHEDULED_CALLBACKS'
 
     # Class variables serving as defaults for instance variables.
     _persistable_id = None
@@ -30,11 +31,11 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
         """
         Overwrite this if you want to provide your own persistable ID, e.g.
         because you already have a UUID.
-
+        
         Be careful though, this ID should be a unique type that identifies this
         _instance_!  And must be of a type that can be saved in :class:`Bundle`
-
-        :return: A persistable id that identifies this instance
+        
+        :return: A persistable id that identifies this instance 
         """
         if self._persistable_id is None:
             self._persistable_id = uuid.uuid4()
@@ -45,11 +46,16 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
 
     @abc.abstractmethod
     def save_instance_state(self, out_state):
-        pass
+        loop = self.loop()
+        if loop is not None:
+            out_state[self.SCHEDULED_CALLBACKS] = tuple(loop._get_owning_callback_handles(self))
 
     @abc.abstractmethod
     def load_instance_state(self, saved_state):
-        pass
+        loop = saved_state.loop()
+        if loop is not None:
+            for cb in saved_state[self.SCHEDULED_CALLBACKS]:
+                loop._insert_callback(cb)
 
 
 class _Reference(collections.Hashable):
@@ -71,7 +77,7 @@ class _Reference(collections.Hashable):
 class Bundle(dict):
     """
     This object represents the persisted state of a :class:`LoopPersistable` object.
-
+    
     When instantiating it will ask the persistable to save its instance state
     which will trigger any child persistables to also be saved.
     """
@@ -149,6 +155,8 @@ class Bundle(dict):
         :type loop: :class:`apricotpy.AbstractEventLoop`
         :return: An instance of the persitsable with its state loaded from this bundle.
         """
+        if not isinstance(loop, apricotpy.AbstractEventLoop):
+            raise TypeError("Loop must be an AbstractEventLoop, for '{}'".format(type(loop)))
         _LOGGER.debug("Unbundling root {}".format(self))
         return Unbundler(self, loop).do()
 
@@ -210,7 +218,7 @@ class Bundle(dict):
 
 class Unbundler(collections.Mapping):
     """
-    The unbundler provides a readonly view of a bundle that is used while a
+    The unbundler provides a readonly view of a bundle that is used while a 
     persistable is reloading its state.
     """
 
@@ -283,7 +291,11 @@ class Unbundler(collections.Mapping):
 
     def loop(self):
         if self.loop_ref is not None:
-            return self.get_persistable(self.loop_ref)
+            loop = self.get_persistable(self.loop_ref)
+            assert isinstance(loop, apricotpy.AbstractEventLoop), \
+                "Bundle state is inconsistent, expected '{}' to refer to a loop, " \
+                "instead got '{}'".format(self.loop_ref, type(loop))
+            return loop
         else:
             return None
 
@@ -303,11 +315,10 @@ class Unbundler(collections.Mapping):
         if not isinstance(ref, _Reference):
             raise TypeError
 
-        bundle = self._bundle._get_bundle(ref)
-
         if ref in self._persistables:
             return self._persistables[ref]
         else:
+            bundle = self._bundle._get_bundle(ref)
             persistable = Unbundler(bundle, persistables=self._persistables).do()
             self._persistables[ref] = persistable
             return persistable

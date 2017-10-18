@@ -26,7 +26,7 @@ class TaskWithContinue(persistable.Task):
 
 class TestPersistableTask(utils.TestCaseWithLoop):
     def test_continue(self):
-        task = ~self.loop.create_inserted(TaskWithContinue)
+        task = self.loop.create(TaskWithContinue)
 
         saved_state = persistable.Bundle(task)
 
@@ -45,10 +45,7 @@ class TestPersistableTask(utils.TestCaseWithLoop):
 
     def test_await(self):
         # Tick 0
-        task = ~self.loop.create_inserted(PersistableTask)
-
-        uuid = task.uuid
-
+        task = self.loop.create(PersistableTask)
         saved_state = persistable.Bundle(task)
 
         # Finish
@@ -67,7 +64,6 @@ class TestPersistableTask(utils.TestCaseWithLoop):
         # Finish
         result = ~task
         self.assertEqual(result, 5)
-        self.assertFalse(awaiting.in_loop())
 
         # Tick 2
         task = saved_state.unbundle(self.loop)

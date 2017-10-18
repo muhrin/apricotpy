@@ -1,3 +1,4 @@
+import apricotpy
 import apricotpy.persistable as persistable
 import unittest
 
@@ -6,6 +7,7 @@ class TestCaseWithLoop(unittest.TestCase):
     def setUp(self):
         super(TestCaseWithLoop, self).setUp()
         self.loop = persistable.BaseEventLoop()
+        apricotpy.set_event_loop(self.loop)
 
     def tearDown(self):
         super(TestCaseWithLoop, self).tearDown()

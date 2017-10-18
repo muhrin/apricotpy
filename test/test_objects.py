@@ -19,17 +19,17 @@ class TestLoopObject(utils.TestCaseWithLoop):
 
         self.loop.messages().add_listener(got_message, "loop.object.*.*")
 
-        # Create and remove
         obj = self.loop.create(DummyObject)
-        self.loop.run_until_complete(self.loop.remove(obj))
+        # Tick the loop so the message gets sent out
+        self.loop.tick()
 
-        for evt in ['created', 'inserting', 'inserted', 'removed']:
+        for evt in ['created']:
             self.assertIn('loop.object.{}.{}'.format(obj.uuid, evt), messages)
 
     def test_send_message(self):
         class Obj(apricotpy.LoopObject):
-            def on_loop_inserted(self, loop):
-                super(Obj, self).on_loop_inserted(loop)
+            def __init__(self, loop):
+                super(Obj, self).__init__(loop=loop)
                 self.send_message("greetings", "'sup yo")
 
         messages = []
@@ -40,7 +40,8 @@ class TestLoopObject(utils.TestCaseWithLoop):
         self.loop.messages().add_listener(got_message, 'greetings')
 
         obj = self.loop.create(Obj)
-        self.loop.run_until_complete(self.loop.remove(obj))
+        # Tick so the message gets sent out
+        self.loop.tick()
 
         message = messages[0]
         self.assertEqual(message[0], "greetings")
@@ -52,13 +53,13 @@ class TestAwaitableLoopObject(utils.TestCaseWithLoop):
     def test_result(self):
         result = "I'm walkin 'ere!"
 
-        awaitable = ~self.loop.create_inserted(AwaitableObject)
+        awaitable = self.loop.create(AwaitableObject)
 
         awaitable.set_result(result)
         self.assertEqual(awaitable.result(), result)
 
     def test_cancel(self):
-        awaitable = ~self.loop.create_inserted(AwaitableObject)
+        awaitable = self.loop.create(AwaitableObject)
 
         self.loop.call_soon(awaitable.cancel)
         with self.assertRaises(apricotpy.CancelledError):

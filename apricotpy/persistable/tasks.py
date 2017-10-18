@@ -22,8 +22,8 @@ class Task(with_metaclass(
     CALLBACK_HANDLE = 'CALLBACK_HANDLE'
     NEXT_STEP = 'NEXT_STEP'
 
-    def __init__(self):
-        super(Task, self).__init__()
+    def __init__(self, loop=None):
+        super(Task, self).__init__(loop)
         self.__saved_state = None
 
     def save_instance_state(self, out_state):

@@ -22,29 +22,9 @@ class LoopObject(object):
         self._uuid = uuid.uuid4()
         self._loop_callback = None
 
-        self._loop._insert(self)
-
     @property
     def uuid(self):
         return self._uuid
-
-    def on_loop_inserted(self, loop):
-        """
-        Called when the object is inserted into the event loop.
-
-        :param loop: The event loop
-        :type loop: `apricotpy.AbstractEventLoop`
-        """
-        self._loop = loop
-
-    def on_loop_removed(self):
-        """
-        Called when the object is removed from the event loop.
-        """
-        if self._loop is None:
-            raise RuntimeError("Not in an event loop")
-
-        self._loop = None
 
     def loop(self):
         """
@@ -56,22 +36,6 @@ class LoopObject(object):
 
     def in_loop(self):
         return self._loop is not None
-
-    def insert_into(self, loop):
-        """ Schedule the insertion of the object into an event loop"""
-        fut = loop.create_future()
-        self._loop_callback = loop.call_soon(loop._insert, self, fut)
-        return fut
-
-    def remove(self, loop=None):
-        """ Schedule the removal of the object from an event loop """
-        if loop is None:
-            assert self._loop is not None, "No loop supplied and the object is not in a loop"
-            loop = self._loop
-
-        fut = loop.create_future()
-        self._loop_callback = loop.call_soon(loop._remove, self, fut)
-        return fut
 
     def send_message(self, subject, body=None):
         """

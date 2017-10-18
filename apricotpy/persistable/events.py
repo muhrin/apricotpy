@@ -1,6 +1,9 @@
-import apricotpy.events
+import inspect
 import logging
+import apricotpy
+import apricotpy.events
 from . import core
+from . import persistables
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,8 +36,9 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
     WHEN = 'WHEN'
     RAN = -1
 
-    def __init__(self, fn, args, loop):
+    def __init__(self, fn, args, loop, owner=None):
         super(Handle, self).__init__(fn, args, loop)
+        self._owner = owner
         self._when = None
 
     def __hash__(self):
@@ -78,8 +82,6 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
     def load_instance_state(self, saved_state):
         super(Handle, self).load_instance_state(saved_state)
         self._when = saved_state[self.WHEN]
-        if self._when != self.RAN:
-            self._loop._insert_callback(self)
 
     def _run(self):
         self._when = self.RAN
@@ -91,9 +93,9 @@ class TimerHandle(Handle):
 
     __slots__ = ['_scheduled', '_when']
 
-    def __init__(self, when, fn, args, loop):
+    def __init__(self, when, fn, args, loop, owner=None):
         assert when is not None
-        super(TimerHandle, self).__init__(fn, args, loop)
+        super(TimerHandle, self).__init__(fn, args, loop, owner)
         if self._source_traceback:
             # Delete the one generated from our super
             del self._source_traceback[-1]
@@ -120,3 +122,18 @@ class TimerHandle(Handle):
     def load_instance_state(self, saved_state):
         super(TimerHandle, self).load_instance_state(saved_state)
         self._scheduled = saved_state[self.SCHEDULED]
+
+
+def _get_loop_persistable_from_fn(fn):
+    """
+    If the function passed is actually a method or a
+    :class:`persistables.Function` and the owning object is a LoopPersistable
+    the object will be returned.  Otherwise None.
+
+    :param fn: The function
+    :return: The loop object, or None
+    """
+    if isinstance(fn, persistables.Function):
+        fn = fn._fn
+    if inspect.ismethod(fn) and isinstance(fn.__self__, core.LoopPersistable):
+        return fn.__self__

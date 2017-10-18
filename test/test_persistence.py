@@ -51,7 +51,7 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
 
     def test_simple(self):
         # Create object with context
-        loop_obj = ~self.loop.create_inserted(Obj)
+        loop_obj = self.loop.create(Obj)
 
         # Populate the context
         loop_obj.ctx.a = 5
@@ -60,19 +60,16 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
         # Persist the object in a bundle
         saved_state = persistable.Bundle(loop_obj)
 
-        # Have to remove the original (because UUIDs are same)
-        ~self.loop.remove(loop_obj)
-
         # Load the object from the saved state and compare contexts
         loaded_loop_obj = saved_state.unbundle(self.loop)
         self.assertEqual(loop_obj.ctx, loaded_loop_obj.ctx)
 
     def test_simple_save_load(self):
-        obj = ~self.loop.create_inserted(persistable.LoopObject)
+        obj = self.loop.create(persistable.LoopObject)
         uuid = obj.uuid
 
         saved_state = persistable.Bundle(obj)
-        ~self.loop.remove(obj)
+        # ~self.loop.remove(obj)
 
         obj = saved_state.unbundle(self.loop)
         self.assertEqual(uuid, obj.uuid)
@@ -85,7 +82,8 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
         saved_state = persistable.Bundle(string)
 
         # Have to remove before re-creating
-        ~self.loop.remove(string)
+        # TODO: Fix this:
+        # ~self.loop.remove(string)
 
         string = saved_state.unbundle(self.loop)
         self.assertEqual(string.value, value)
@@ -94,7 +92,7 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
 class PersistableAwaitableFive(apricotpy.persistable.awaitable.AwaitableLoopObject):
     def __init__(self, loop=None):
         super(PersistableAwaitableFive, self).__init__(loop)
-        self.call_soon(self.set_result, 5)
+        self.loop().call_soon(self.set_result, 5)
 
 
 class TestPersistableAwaitable(TestCaseWithPersistenceLoop):

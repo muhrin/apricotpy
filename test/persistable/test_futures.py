@@ -44,7 +44,7 @@ class TestFuture(utils.TestCaseWithLoop):
         saved_state = persistable.Bundle(fut)
 
         # Now unbundle it
-        fut2 = saved_state.unbundle(saved_state)
+        fut2 = saved_state.unbundle(self.loop)
 
         self.assertTrue(futures_equal(fut, fut2))
 
@@ -56,7 +56,7 @@ class TestFuture(utils.TestCaseWithLoop):
         saved_state = persistable.Bundle(fut)
 
         # Now unbundle it
-        fut2 = saved_state.unbundle(saved_state)
+        fut2 = saved_state.unbundle(self.loop)
 
         self.assertTrue(futures_equal(fut, fut2))
 
@@ -68,7 +68,7 @@ class TestFuture(utils.TestCaseWithLoop):
         saved_state = persistable.Bundle(fut)
 
         # Now unbundle it
-        fut2 = saved_state.unbundle(saved_state)
+        fut2 = saved_state.unbundle(self.loop)
 
         self.assertTrue(futures_equal(fut, fut2))
 
@@ -80,6 +80,6 @@ class TestFuture(utils.TestCaseWithLoop):
         saved_state = persistable.Bundle(fut)
 
         # Now unbundle it
-        fut2 = saved_state.unbundle(saved_state)
+        fut2 = saved_state.unbundle(self.loop)
 
         self.assertTrue(futures_equal(fut, fut2))

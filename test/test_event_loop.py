@@ -1,27 +1,18 @@
-import unittest
 import apricotpy
+from . import utils
 
 
 class StringObj(apricotpy.LoopObject):
     @staticmethod
-    def create(loop, value):
-        return StringObj(value)
+    def create(value, loop=None):
+        return StringObj(value, loop)
 
-    def __init__(self, value):
-        super(StringObj, self).__init__()
+    def __init__(self, value, loop=None):
+        super(StringObj, self).__init__(loop=loop)
         self.value = value
 
 
-class TestEventLoop(unittest.TestCase):
-    def setUp(self):
-        super(TestEventLoop, self).setUp()
-        self.loop = apricotpy.BaseEventLoop()
-
-    def tearDown(self):
-        super(TestEventLoop, self).tearDown()
-        self.loop.close()
-        self.loop = None
-
+class TestEventLoop(utils.TestCaseWithLoop):
     def test_object_factory(self):
         value_string = "'sup yo"
 
@@ -29,12 +20,8 @@ class TestEventLoop(unittest.TestCase):
         a = self.loop.create(value_string)
         self.assertEqual(a.value, value_string)
 
-    def test_create_remove(self):
+    def test_create(self):
         obj = self.loop.create(StringObj, 'mmmm...apricot pie')
-        uuid = obj.uuid
-        result = ~self.loop.remove(obj)
-
-        self.assertEqual(result, uuid)
 
     def test_create_message(self):
         result = {}
@@ -45,7 +32,8 @@ class TestEventLoop(unittest.TestCase):
 
         self.loop.messages().add_listener(created, 'loop.object.*.created')
         obj = self.loop.create(StringObj, 'created')
-        self.loop.run_until_complete(self.loop.remove(obj))
+        # Tick so the message gets sent out
+        self.loop.tick()
 
         self.assertEqual(result['subject'], 'loop.object.{}.created'.format(obj.uuid))
         self.assertEqual(result['body'], obj.uuid)

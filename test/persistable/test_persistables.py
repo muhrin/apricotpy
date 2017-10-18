@@ -9,23 +9,3 @@ class TestObjectProxy(utils.TestCaseWithLoop):
 
         self.assertEqual(obj.loop(), proxy.loop())
         self.assertEqual(obj.in_loop(), proxy.in_loop())
-
-        # Insert obj into loop
-        self.loop.run_until_complete(obj.insert_into(self.loop))
-        self.assertEqual(obj.loop(), proxy.loop())
-        self.assertEqual(obj.in_loop(), proxy.in_loop())
-
-        # Remove
-        self.loop.run_until_complete(obj.remove())
-        self.assertEqual(obj.loop(), proxy.loop())
-        self.assertEqual(obj.in_loop(), proxy.in_loop())
-
-        # Now insert the proxy
-        self.loop.run_until_complete(proxy.insert_into(self.loop))
-        self.assertEqual(obj.loop(), proxy.loop())
-        self.assertEqual(obj.in_loop(), proxy.in_loop())
-
-        # and remove
-        self.loop.run_until_complete(proxy.remove())
-        self.assertEqual(obj.loop(), proxy.loop())
-        self.assertEqual(obj.in_loop(), proxy.in_loop())

@@ -19,6 +19,7 @@ class UuidMixin(object):
 class ClassNotFoundException(Exception):
     pass
 
+
 class ClassLoader(object):
     def __init__(self, parent=None):
         self._parent = parent
@@ -37,6 +38,7 @@ class ClassLoader(object):
                 return Class
 
         return self.find_class(name)
+
 
 def function_name(fn):
     try:
