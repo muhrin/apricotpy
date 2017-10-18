@@ -1,10 +1,8 @@
 import abc
-import sys
-import traceback
 import uuid
+from future.utils import with_metaclass
 
-from future.utils import with_metaclass 
-
+from . import events
 from . import futures
 
 __all__ = ['LoopObject',
