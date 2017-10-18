@@ -98,7 +98,7 @@ class BaseEventLoop(apricotpy.BaseEventLoop, objects.LoopObject):
 
         to_save = dict(self._objects)
         # Remove those that are not savable
-        for uuid, obj in self._objects.iteritems():
+        for uuid, obj in self._objects.items():
             if not isinstance(obj, core.LoopPersistable):
                 _LOGGER.warning("Not saving object '{}', it is not persistable".format(obj))
                 to_save.pop(uuid)

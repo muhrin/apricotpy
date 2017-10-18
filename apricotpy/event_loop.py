@@ -185,7 +185,7 @@ class BaseEventLoop(AbstractEventLoop):
     def objects(self, obj_type=None):
         # Filter the type if necessary
         if obj_type is not None:
-            return [obj for obj in self._objects.itervalues() if isinstance(obj, obj_type)]
+            return [obj for obj in self._objects.values() if isinstance(obj, obj_type)]
         else:
             return self._objects.values()
 

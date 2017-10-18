@@ -3,6 +3,8 @@ import concurrent.futures
 import sys
 import traceback
 
+from future.utils import with_metaclass 
+
 from . import events
 
 __all__ = ['CancelledError', 'Awaitable', 'Future',
@@ -21,11 +23,10 @@ _CANCELLED = 'CANCELLED'
 _FINISHED = 'FINISHED'
 
 
-class Awaitable(object):
+class Awaitable(with_metaclass(abc.ABCMeta, object)):
     """
     An interface that defines an object that is awaitable e.g. a Future
     """
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def done(self):
@@ -128,7 +129,7 @@ class Future(Awaitable):
     def add_done_callback(self, fn):
         """
         Add a callback to be run when the future becomes done.
-        
+
         :param fn: The callback function.
         """
         if self.done():
@@ -153,7 +154,7 @@ class Future(Awaitable):
     def _schedule_callbacks(self):
         """
         Ask the event loop to call all callbacks.
-        
+
         The callbacks are scheduled to be called as soon as possible.
         """
         callbacks = self._callbacks[:]
@@ -214,8 +215,8 @@ _GatheringFuture = _gathering_future_template(Future)
 def gather(awaitables, loop):
     """
     Gather multiple awaitables into a single :class:`Awaitable`
-    
-    :param awaitables: The awaitables to gather 
+
+    :param awaitables: The awaitables to gather
     :param loop: The event loop
     :return: An awaitable representing all the awaitables
     :rtype: :class:`Awaitable`

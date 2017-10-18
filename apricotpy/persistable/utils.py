@@ -4,6 +4,7 @@ import importlib
 import inspect
 import uuid
 
+from past.builtins import basestring
 
 class UuidMixin(object):
     def __init__(self, *args, **kwargs):
@@ -38,13 +39,16 @@ class ClassLoader(object):
         return self.find_class(name)
 
 def function_name(fn):
-    if inspect.ismethod(fn):
-        cls = fn.__self__.__class__
-        name = class_name(cls) + '.' + fn.__name__
-    elif inspect.isfunction(fn):
-        name = fn.__module__ + '.' + fn.__name__
-    else:
-        raise ValueError("Must be function or method")
+    try:
+        name = fn.__module__ + '.' + fn.__qualname__
+    except AttributeError:
+        if inspect.ismethod(fn):
+            cls = fn.__self__.__class__
+            name = class_name(cls) + '.' + fn.__name__
+        elif inspect.isfunction(fn):
+            name = fn.__module__ + '.' + fn.__name__
+        else:
+            raise ValueError("Must be function or method")
 
     # Make sure we can load it
     try:
@@ -150,10 +154,10 @@ def is_sequence_not_str(value):
     """
     A helper to check if a value is of type :class:`collections.Sequence`
     but not a string type (i.e. :class:`str` or :class:`unicode`)
-    
-    :param value: The value to check 
+
+    :param value: The value to check
     :return: True of a sequence but not string, False otherwise
     :rtype: bool
     """
     return isinstance(value, collections.Sequence) and \
-           not isinstance(value, (str, unicode))
+           not isinstance(value, basestring)

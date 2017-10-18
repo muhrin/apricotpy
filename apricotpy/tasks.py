@@ -3,6 +3,8 @@ import logging
 from collections import namedtuple
 import traceback
 
+from future.utils import with_metaclass
+
 from . import objects
 from . import futures
 
@@ -31,8 +33,7 @@ class Await(_TaskDirective):
 _NO_RESULT = ()
 
 
-class TaskMixin(objects.AwaitableMixin):
-    __metaclass__ = abc.ABCMeta
+class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin)):
 
     Terminated = namedtuple("Terminated", ['result'])
 
@@ -164,7 +165,10 @@ class TaskMixin(objects.AwaitableMixin):
             self._schedule_step()
 
 
-class Task(TaskMixin, objects.LoopObject):
+class Task(with_metaclass(
+        abc.ABCMeta,
+        TaskMixin, objects.LoopObject
+    )):
     """
     A task is an awaitable loop object which has an execute() method
     that will be called when it is inserted into the loop.
@@ -174,4 +178,3 @@ class Task(TaskMixin, objects.LoopObject):
 
 
     """
-    __metaclass__ = abc.ABCMeta

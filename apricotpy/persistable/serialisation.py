@@ -1,11 +1,13 @@
 import abc
 import os
 import pickle
+
+from future.utils import with_metaclass
+
 from . import core
 
 
-class Persister(object):
-    __metaclass__ = abc.ABCMeta
+class Persister(with_metaclass(abc.ABCMeta, object)):
 
     @abc.abstractmethod
     def serialise_state(self, saved_state):

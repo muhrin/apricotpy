@@ -56,7 +56,7 @@ class TestEventLoop(unittest.TestCase):
             raise RuntimeError('Test error!')
         except RuntimeError as e:
             context = {
-                'message': e.message,
+                'message': str(e),
                 'exception': e,
             }
             self.loop.default_exception_handler(context)
@@ -67,7 +67,7 @@ class TestEventLoop(unittest.TestCase):
         except RuntimeError as e:
             e.__traceback__ = None
             context = {
-                'message': e.message,
+                'message': str(e),
                 'exception': e,
             }
             self.loop.default_exception_handler(context)

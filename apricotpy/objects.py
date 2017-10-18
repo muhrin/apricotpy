@@ -1,11 +1,16 @@
 import abc
+import sys
+import traceback
 import uuid
 
-from . import events
+from future.utils import with_metaclass 
+
 from . import futures
 
-__all__ = ['LoopObject', 'TickingMixin',
-           'TickingLoopObject', 'AwaitableMixin']
+__all__ = ['LoopObject',
+           'TickingMixin',
+           'TickingLoopObject',
+           'AwaitableMixin']
 
 
 class LoopObject(object):
@@ -78,12 +83,11 @@ class LoopObject(object):
         self.loop().messages().send(subject, body, self.uuid)
 
 
-class TickingMixin(object):
+class TickingMixin(with_metaclass(abc.ABCMeta, object)):
     """
     A mixin that makes a LoopObject be 'ticked' each time around the event
     loop.  The user code should go in the `tick()` function.
     """
-    __metaclass__ = abc.ABCMeta
 
     def __init__(self, *args, **kwargs):
         super(TickingMixin, self).__init__(*args, **kwargs)

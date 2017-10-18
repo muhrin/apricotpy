@@ -8,6 +8,8 @@ import sys
 import threading
 import traceback
 
+from future.utils import with_metaclass
+
 __all__ = ['AbstractEventLoopPolicy',
            'AbstractEventLoop',
            'Handle', 'TimerHandle',
@@ -187,8 +189,7 @@ class TimerHandle(Handle):
         return NotImplemented if equal is NotImplemented else not equal
 
 
-class AbstractEventLoop(object):
-    __metaclass__ = abc.ABCMeta
+class AbstractEventLoop(with_metaclass(abc.ABCMeta, object)):
 
     @abc.abstractmethod
     def create_future(self):
@@ -261,7 +262,7 @@ class AbstractEventLoop(object):
         Get the objects in the event loop.  Optionally filer for loop objects of
         a given type.
 
-        :param obj_type: The loop object class to filter for. 
+        :param obj_type: The loop object class to filter for.
         :return: A list of the found objects.
         """
         pass
@@ -271,7 +272,7 @@ class AbstractEventLoop(object):
         """
         Create a task and schedule it to be inserted into the loop.
 
-        :param object_type: The task identifier 
+        :param object_type: The task identifier
         :param args: (optional) positional arguments to the task
         :param kwargs: (optional) keyword arguments to the task
 
@@ -284,7 +285,7 @@ class AbstractEventLoop(object):
         """
         Create a task and schedule it to be inserted into the loop.
 
-        :param object_type: The task identifier 
+        :param object_type: The task identifier
         :param args: (optional) positional arguments to the task
         :param kwargs: (optional) keyword arguments to the task
 
@@ -297,7 +298,7 @@ class AbstractEventLoop(object):
         """
         Schedule an object to be removed an object from the event loop.
 
-        :param loop_object: The object to remove 
+        :param loop_object: The object to remove
         :return: A future corresponding to the removal of the object
         """
         pass
@@ -313,7 +314,7 @@ class AbstractEventLoop(object):
         where task is some task identifier and positional and keyword arguments
         can be supplied and it returns the :class:`Task` instance.
 
-        :param factory: The task factory 
+        :param factory: The task factory
         """
         pass
 
@@ -364,10 +365,8 @@ class AbstractEventLoop(object):
         # endregion
 
 
-class AbstractEventLoopPolicy(object):
+class AbstractEventLoopPolicy(with_metaclass(abc.ABCMeta, object)):
     """Abstract policy for accessing the event loop."""
-
-    __metaclass__ = abc.ABCMeta
 
     @abc.abstractmethod
     def get_event_loop(self):

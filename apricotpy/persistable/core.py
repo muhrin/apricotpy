@@ -4,6 +4,10 @@ import collections
 import inspect
 import logging
 import uuid
+
+from past.builtins import basestring
+from future.utils import with_metaclass
+
 from . import utils
 
 __all__ = ['LoopPersistable', 'Bundle', 'Unbundler']
@@ -13,11 +17,10 @@ _NULL = tuple()
 _KEY_CLASS_LOADER = 'class_loader'
 
 
-class LoopPersistable(object):
+class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     """
     An abstract class that defines objects that are persistable.
     """
-    __metaclass__ = abc.ABCMeta
 
     # Class variables serving as defaults for instance variables.
     _persistable_id = None
@@ -27,11 +30,11 @@ class LoopPersistable(object):
         """
         Overwrite this if you want to provide your own persistable ID, e.g.
         because you already have a UUID.
-        
+
         Be careful though, this ID should be a unique type that identifies this
         _instance_!  And must be of a type that can be saved in :class:`Bundle`
-        
-        :return: A persistable id that identifies this instance 
+
+        :return: A persistable id that identifies this instance
         """
         if self._persistable_id is None:
             self._persistable_id = uuid.uuid4()
@@ -59,7 +62,7 @@ class _Reference(collections.Hashable):
         return hash(self.id)
 
     def __eq__(self, other):
-        return self.id == other
+        return self.id == other.id
 
     def __repr__(self):
         return "<Reference {}>".format(self.id)
@@ -68,12 +71,12 @@ class _Reference(collections.Hashable):
 class Bundle(dict):
     """
     This object represents the persisted state of a :class:`LoopPersistable` object.
-    
+
     When instantiating it will ask the persistable to save its instance state
     which will trigger any child persistables to also be saved.
     """
 
-    def __init__(self, persistable, bundles=None, class_loader=None):
+    def __init__(self, persistable, class_loader=None, root=None):
         super(Bundle, self).__init__()
         self.set_class_loader(class_loader)
         self._class_name = utils.class_name(persistable, class_loader)
@@ -84,22 +87,27 @@ class Bundle(dict):
         else:
             self._loop_ref = _Reference(persistable.loop())
 
-        if bundles is None:
+        if root is None:
             # We're the 'root' bundle (i.e. the first to be Bundled)
+            self._root = self
             self._bundles = {}
             # 'Bootstrap' by inserting the root loop as empty
             if self._loop_ref is not None:
                 self._bundles[self._loop_ref] = None
         else:
-            assert self._id not in bundles, "Already bundled!"
-            self._bundles = bundles
+            assert self._id not in root._bundles, "Already bundled!"
+            self._root = root
 
-        self._bundles[_Reference(persistable)] = self
+        self._root._bundles[_Reference(persistable)] = self
         persistable.save_instance_state(self)
 
         _LOGGER.debug("Bundling {}".format(self))
 
     def __getitem__(self, item):
+        if not isinstance(item, str):
+            raise TypeError(
+                "Keys must be strings or enum constants, got '{}'".format(type(item))
+            )
         return super(Bundle, self).__getitem__(item)
 
     def __setitem__(self, key, value):
@@ -159,7 +167,7 @@ class Bundle(dict):
                 raise ValueError("Unsupported sequence type ({}), use a tuple".format(type(value)))
 
         if isinstance(value, dict):
-            return {k: self._encode(item) for k, item in value.iteritems()}
+            return {k: self._encode(item) for k, item in value.items()}
 
         if inspect.isfunction(value) or inspect.ismethod(value):
             from .persistables import Function
@@ -167,7 +175,7 @@ class Bundle(dict):
             fn_obj = Function(value)
             return self._ensure_bundle(fn_obj)
 
-        if isinstance(value, (int, float, str, unicode, uuid.UUID)):
+        if isinstance(value, (int, float, basestring, uuid.UUID)):
             return value
 
         if isinstance(value, BaseException):
@@ -181,14 +189,28 @@ class Bundle(dict):
 
     def _ensure_bundle(self, persistable):
         ref = _Reference(persistable)
-        if ref not in self._bundles:
-            self._bundles[ref] = Bundle(persistable, self._bundles, self._class_loader)
+        try:
+            self._get_bundle(ref)
+        except ValueError:
+            self._root._bundles[ref] = Bundle(persistable, root=self._root)
         return ref
+
+    def _get_bundle(self, ref):
+        try:
+            return self._root._bundles[ref]
+        except KeyError:
+            raise ValueError("Reference ({}) to bundle not found".format(ref))
+
+    def _load_class(self, cls):
+        if self._root._class_loader is not None:
+            return self._class_loader.load_class(cls)
+        else:
+            return utils.load_object(cls)
 
 
 class Unbundler(collections.Mapping):
     """
-    The unbundler provides a readonly view of a bundle that is used while a 
+    The unbundler provides a readonly view of a bundle that is used while a
     persistable is reloading its state.
     """
 
@@ -216,7 +238,7 @@ class Unbundler(collections.Mapping):
             _LOGGER.debug("Unbundling {}".format(self._bundle))
 
             # Get the class using the class loader and instantiate it
-            persistable_class = self._bundle._class_loader.load_class(self._bundle.class_name)
+            persistable_class = self._bundle._load_class(self._bundle.class_name)
             persistable = persistable_class.__new__(persistable_class)
 
             # Have to put it in the persistables dictionary here as it may be accessed
@@ -237,6 +259,10 @@ class Unbundler(collections.Mapping):
         return self._bundle.__len__()
 
     def __getitem__(self, item):
+        if not isinstance(item, str):
+            raise TypeError(
+                "Keys must be strings or enum constants, got '{}'".format(type(item))
+            )
         return self.decode(self._bundle[item])
 
     def __contains__(self, item):
@@ -269,7 +295,7 @@ class Unbundler(collections.Mapping):
             return tuple(self.decode(item) for item in value)
 
         if isinstance(value, dict):
-            return {k: self.decode(item) for k, item in value.iteritems()}
+            return {k: self.decode(item) for k, item in value.items()}
 
         return value
 
@@ -277,14 +303,11 @@ class Unbundler(collections.Mapping):
         if not isinstance(ref, _Reference):
             raise TypeError
 
-        if ref in self._bundle._bundles:
-            if ref in self._persistables:
-                return self._persistables[ref]
-            else:
-                bundle = self._bundle._bundles[ref]
-                persistable = Unbundler(bundle, persistables=self._persistables).do()
-                self._persistables[ref] = persistable
+        bundle = self._bundle._get_bundle(ref)
 
-                return persistable
+        if ref in self._persistables:
+            return self._persistables[ref]
         else:
-            raise ValueError("Object referred to now found ({})".format(ref))
+            persistable = Unbundler(bundle, persistables=self._persistables).do()
+            self._persistables[ref] = persistable
+            return persistable
