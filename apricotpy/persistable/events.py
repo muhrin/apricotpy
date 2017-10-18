@@ -34,6 +34,7 @@ class _PersistableHandleMixin(core.LoopPersistable):
 
 class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
     WHEN = 'WHEN'
+    OWNER = 'OWNER'
     RAN = -1
 
     def __init__(self, fn, args, loop, owner=None):
@@ -78,10 +79,12 @@ class Handle(_PersistableHandleMixin, apricotpy.events.Handle):
     def save_instance_state(self, out_state):
         super(Handle, self).save_instance_state(out_state)
         out_state[self.WHEN] = self._when
+        out_state[self.OWNER] = self._owner
 
     def load_instance_state(self, saved_state):
         super(Handle, self).load_instance_state(saved_state)
         self._when = saved_state[self.WHEN]
+        self._owner = saved_state[self.OWNER]
 
     def _run(self):
         self._when = self.RAN

@@ -105,7 +105,6 @@ class BaseEventLoop(AbstractEventLoop):
         else:
             self._callback_loop = callback_loop
 
-        self._objects = {}
         self._object_factory = None
 
         self._thread_id = None
@@ -182,12 +181,6 @@ class BaseEventLoop(AbstractEventLoop):
     def call_at(self, when, callback, *args):
         return self._callback_loop.call_at(when, callback, *args)
 
-    def get_object(self, uuid):
-        try:
-            return self._objects[uuid]
-        except KeyError:
-            raise ValueError("Unknown uuid")
-
     def stop(self):
         """
         Stop the running event loop. 
@@ -225,12 +218,8 @@ class BaseEventLoop(AbstractEventLoop):
 
         self._stopping = False
         self._callback_loop._close()
-
-        self._objects = None
         self._object_factory = None
-
         self._thread_id = None
-
         self.__mailman = None
 
     # region Errors

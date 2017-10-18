@@ -110,26 +110,11 @@ class BaseEventLoop(apricotpy.BaseEventLoop, core.LoopPersistable):
     def create_future(self):
         return futures.Future(self)
 
-    def get_object(self, uuid):
-        if uuid in self._objects:
-            return self._objects[uuid]
-
-        raise ValueError("Unknown object UUID '{}'".format(uuid))
-
     def save_instance_state(self, out_state):
         super(BaseEventLoop, self).save_instance_state(out_state)
 
         out_state[self.READY] = tuple(self._callback_loop._ready)
         out_state[self.SCHEDULED] = tuple(self._callback_loop._scheduled)
-
-        to_save = dict(self._objects)
-        # Remove those that are not savable
-        for uuid, obj in self._objects.items():
-            if not isinstance(obj, core.LoopPersistable):
-                _LOGGER.warning("Not saving object '{}', it is not persistable".format(obj))
-                to_save.pop(uuid)
-
-        out_state[self.OBJECTS] = to_save
 
     def load_instance_state(self, saved_state):
         super(BaseEventLoop, self).load_instance_state(saved_state)
@@ -137,15 +122,11 @@ class BaseEventLoop(apricotpy.BaseEventLoop, core.LoopPersistable):
         self._callback_loop = _CallbackLoop(self)
         self._callback_loop._ready = list(saved_state[self.READY])
         self._callback_loop._scheduled = list(saved_state[self.SCHEDULED])
-        self._objects = saved_state[self.OBJECTS]
 
         # Runtime state stuff
         self._stopping = False
         self._object_factory = None
         self.__mailman = apricotpy.messages.Mailman(self)
-
-    def _insert_object(self, obj):
-        self._objects[obj.uuid] = obj
 
     def _insert_callback(self, handle):
         if isinstance(handle, events.TimerHandle):
@@ -158,4 +139,3 @@ class BaseEventLoop(apricotpy.BaseEventLoop, core.LoopPersistable):
     def _get_owning_callback_handles(self, loop_persistable):
         return (handle for handle in self._callback_loop._ready
                 if handle._owner is loop_persistable)
-

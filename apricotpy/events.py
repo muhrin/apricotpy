@@ -254,10 +254,6 @@ class AbstractEventLoop(object):
 
     # region Objects
     @abc.abstractmethod
-    def get_object(self, uuid):
-        pass
-
-    @abc.abstractmethod
     def create(self, object_type, *args, **kwargs):
         """
         Create a task and schedule it to be inserted into the loop.

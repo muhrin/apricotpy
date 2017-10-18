@@ -38,7 +38,6 @@ class PersistableLoopObjectMixin(core.LoopPersistable):
 
         self._loop = saved_state.loop()
         self._uuid = saved_state[self.UUID]
-        self._loop._insert_object(self)
 
 
 class LoopObject(apricotpy.LoopObject, PersistableLoopObjectMixin):
