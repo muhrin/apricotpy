@@ -5,8 +5,6 @@ import re
 
 from past.builtins import basestring
 
-_WilcardEntry = namedtuple("_WildcardEntry", ['re', 'listeners'])
-
 
 def _contains_wildcard(term):
     """
