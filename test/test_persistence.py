@@ -55,7 +55,7 @@ class TestContextMixin(TestCaseWithPersistenceLoop):
 
         # Populate the context
         loop_obj.ctx.a = 5
-        loop_obj.ctx.b = ('a', 'b')
+        loop_obj.ctx.b = ['a', 'b']
 
         # Persist the object in a bundle
         saved_state = persistable.Bundle(loop_obj)

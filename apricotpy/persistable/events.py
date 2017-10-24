@@ -18,7 +18,8 @@ class _PersistableHandleMixin(core.LoopPersistable):
         super(_PersistableHandleMixin, self).save_instance_state(out_state)
 
         out_state[self.FN] = self._fn
-        out_state[self.ARGS] = self._args
+        if self._args is not None:
+            out_state[self.ARGS] = list(self._args)
         out_state[self.CANCELLED] = self._cancelled
         out_state[self.REPR] = self._repr
 
@@ -27,7 +28,10 @@ class _PersistableHandleMixin(core.LoopPersistable):
 
         self._loop = saved_state.loop()
         self._fn = saved_state[self.FN]
-        self._args = saved_state[self.ARGS]
+        try:
+            self._args = tuple(saved_state[self.ARGS])
+        except KeyError:
+            self._args = None
         self._cancelled = saved_state[self.CANCELLED]
         self._repr = saved_state[self.REPR]
 

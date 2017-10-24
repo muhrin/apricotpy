@@ -22,9 +22,16 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     An abstract class that defines objects that are persistable.
     """
     SCHEDULED_CALLBACKS = 'SCHEDULED_CALLBACKS'
+    PERSISTABLE_ID = 'PERSISTABLE_ID'
+    STORE = 'STORE'
 
     # Class variables serving as defaults for instance variables.
     _persistable_id = None
+    _store = None
+
+    def __eq__(self, other):
+        return isinstance(other, type(self)) and \
+               self.__dict__ == other.__dict__
 
     @property
     def persistable_id(self):
@@ -41,22 +48,34 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
             self._persistable_id = uuid.uuid4()
         return self._persistable_id
 
+    @property
+    def store(self):
+        if self._store is None:
+            self._store = PersistableValueNamespace()
+        return self._store
+
     def loop(self):
         return None
 
-    @abc.abstractmethod
     def save_instance_state(self, out_state):
         loop = self.loop()
         if loop is not None:
             out_state[self.SCHEDULED_CALLBACKS] = \
-                tuple(loop._get_owning_callback_handles(self))
+                list(loop._get_owning_callback_handles(self))
+        out_state[self.PERSISTABLE_ID] = self.persistable_id
+        if self._store is not None:
+            out_state[self.STORE] = self._store.__dict__
 
-    @abc.abstractmethod
     def load_instance_state(self, saved_state):
         loop = saved_state.loop()
         if loop is not None:
             for cb in saved_state[self.SCHEDULED_CALLBACKS]:
                 loop._insert_callback(cb)
+        self._persistable_id = saved_state[self.PERSISTABLE_ID]
+        try:
+            self._store = PersistableValueNamespace(**saved_state[self.STORE])
+        except KeyError:
+            pass
 
 
 class _Reference(collections.Hashable):
@@ -73,6 +92,59 @@ class _Reference(collections.Hashable):
 
     def __repr__(self):
         return "<Reference {}>".format(self.id)
+
+
+def _check_valid_bundle_key(key):
+    if not isinstance(key, basestring):
+        raise TypeError(
+            "Keys must be basestring, got '{}'".format(type(key))
+        )
+
+
+def _check_valid_bundle_value(value):
+    if isinstance(value, LoopPersistable):
+        return
+
+    if utils.is_sequence_not_str(value):
+        if isinstance(value, list):
+            return
+        else:
+            raise TypeError(
+                "Unsupported sequence type ({}), use a list".format(type(value))
+            )
+
+    if inspect.isfunction(value) or inspect.ismethod(value):
+        return
+
+    if isinstance(
+            value,
+            (int, float, basestring, uuid.UUID,
+             dict, BaseException, type(None))):
+        return
+
+    raise ValueError("Unsupported value type '{}'".format(value))
+
+
+class PersistableValueNamespace(object):
+    """
+    A namespace to store persistable values that can be put in a
+    bundle.
+    """
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def __setattr__(self, key, value):
+        _check_valid_bundle_key(key)
+        _check_valid_bundle_value(value)
+        self.__dict__[key] = value
+
+    def __getattr__(self, item):
+        _check_valid_bundle_key(item)
+        return self.__dict__[item]
+
+    def __eq__(self, other):
+        return isinstance(other, type(self)) and \
+               self.__dict__ == other.__dict__
 
 
 class Bundle(dict):
@@ -111,13 +183,11 @@ class Bundle(dict):
         _LOGGER.debug("Bundling {}".format(self))
 
     def __getitem__(self, item):
-        if not isinstance(item, str):
-            raise TypeError(
-                "Keys must be strings or enum constants, got '{}'".format(type(item))
-            )
+        _check_valid_bundle_key(item)
         return super(Bundle, self).__getitem__(item)
 
     def __setitem__(self, key, value):
+        _check_valid_bundle_key(key)
         if key in self:
             _LOGGER.warning(
                 "Key '{}' already exists in the bundle for '{}', "
@@ -148,7 +218,7 @@ class Bundle(dict):
     def set_class_loader(self, class_loader):
         self._class_loader = class_loader
 
-    def unbundle(self, loop):
+    def unbundle(self, loop=None):
         """
         Create an object from a saved instance state into the given loop.
 
@@ -156,12 +226,18 @@ class Bundle(dict):
         :type loop: :class:`apricotpy.AbstractEventLoop`
         :return: An instance of the persitsable with its state loaded from this bundle.
         """
+        if loop is None:
+            loop = apricotpy.get_event_loop()
+
         if not isinstance(loop, apricotpy.AbstractEventLoop):
             raise TypeError("Loop must be an AbstractEventLoop, for '{}'".format(type(loop)))
         _LOGGER.debug("Unbundling root {}".format(self))
+
         return Unbundler(self, loop).do()
 
     def _encode(self, value):
+        _check_valid_bundle_value(value)
+
         if isinstance(value, apricotpy.LoopObject) and \
                 not isinstance(value, LoopPersistable):
             raise ValueError("The object '{}' is not persistable".format(value))
@@ -170,10 +246,10 @@ class Bundle(dict):
             return self._ensure_bundle(value)
 
         if utils.is_sequence_not_str(value):
-            if isinstance(value, tuple):
-                return tuple(self._encode(item) for item in value)
+            if isinstance(value, list):
+                return list(self._encode(item) for item in value)
             else:
-                raise ValueError("Unsupported sequence type ({}), use a tuple".format(type(value)))
+                raise ValueError("Unsupported sequence type ({}), use a list".format(type(value)))
 
         if isinstance(value, dict):
             return {k: self._encode(item) for k, item in value.items()}
@@ -304,8 +380,8 @@ class Unbundler(collections.Mapping):
         if isinstance(value, _Reference):
             return self.get_persistable(value)
 
-        if isinstance(value, tuple):
-            return tuple(self.decode(item) for item in value)
+        if isinstance(value, list):
+            return list(self.decode(item) for item in value)
 
         if isinstance(value, dict):
             return {k: self.decode(item) for k, item in value.items()}
