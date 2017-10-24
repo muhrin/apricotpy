@@ -113,15 +113,15 @@ class BaseEventLoop(apricotpy.BaseEventLoop, core.LoopPersistable):
     def save_instance_state(self, out_state):
         super(BaseEventLoop, self).save_instance_state(out_state)
 
-        out_state[self.READY] = tuple(self._callback_loop._ready)
-        out_state[self.SCHEDULED] = tuple(self._callback_loop._scheduled)
+        out_state[self.READY] = self._callback_loop._ready
+        out_state[self.SCHEDULED] = self._callback_loop._scheduled
 
     def load_instance_state(self, saved_state):
         super(BaseEventLoop, self).load_instance_state(saved_state)
 
         self._callback_loop = _CallbackLoop(self)
-        self._callback_loop._ready = list(saved_state[self.READY])
-        self._callback_loop._scheduled = list(saved_state[self.SCHEDULED])
+        self._callback_loop._ready = saved_state[self.READY]
+        self._callback_loop._scheduled = saved_state[self.SCHEDULED]
 
         # Runtime state stuff
         self._stopping = False

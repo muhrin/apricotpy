@@ -29,9 +29,9 @@ class Function(core.LoopPersistable, collections.Callable):
 
         # If method, store self as an argument
         if inspect.ismethod(self._fn):
-            out_state[_ARGS] = (self._fn.__self__,) + self._args
+            out_state[_ARGS] = [self._fn.__self__] + list(self._args)
         else:
-            out_state[_ARGS] = self._args
+            out_state[_ARGS] = list(self._args)
 
         out_state[_KWARGS] = self._kwargs
 
@@ -41,7 +41,7 @@ class Function(core.LoopPersistable, collections.Callable):
         self._fn = utils.load_object(saved_state[_FN])
 
         # If method, bind back the instance class
-        args = saved_state[_ARGS]
+        args = tuple(saved_state[_ARGS])
         if inspect.ismethod(self._fn):
             obj = args[0]
             self._fn = self._fn.__get__(obj, obj.__class__)
