@@ -32,9 +32,9 @@ class _CallbackLoop(object):
             self._insert_ready(handle)
 
         # Call ready callbacks
-        todo = self._ready
-        self._ready = []
-        for handle in todo:
+        todo = len(self._ready)
+        for _ in range(todo):
+            handle = self._ready.pop(0)
             if handle._cancelled:
                 continue
             try:

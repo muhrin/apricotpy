@@ -13,40 +13,36 @@ class AwaitableObject(apricotpy.AwaitableMixin, apricotpy.LoopObject):
 class TestLoopObject(utils.TestCaseWithLoop):
     def test_messages(self):
         messages = []
+        got_message = utils.get_message_capture_fn(messages)
 
-        def got_message(loop, subject, body, sender):
-            messages.append(subject)
-
-        self.loop.messages().add_listener(got_message, "loop.object.*.*")
+        self.loop.messages().add_listener(got_message, sender_filter="DummyObject.*")
 
         obj = self.loop.create(DummyObject)
         # Tick the loop so the message gets sent out
         self.loop.tick()
 
-        for evt in ['created']:
-            self.assertIn('loop.object.{}.{}'.format(obj.uuid, evt), messages)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]['subject'], 'created')
 
     def test_send_message(self):
         class Obj(apricotpy.LoopObject):
             def __init__(self, loop):
                 super(Obj, self).__init__(loop=loop)
-                self.send_message("greetings", "'sup yo")
+                self.send_message("greetings", body="'sup yo")
 
         messages = []
+        got_message = utils.get_message_capture_fn(messages)
 
-        def got_message(loop, subject, body, sender):
-            messages.append((subject, body, sender))
-
-        self.loop.messages().add_listener(got_message, 'greetings')
+        self.loop.messages().add_listener(got_message, subject_filter='greetings')
 
         obj = self.loop.create(Obj)
         # Tick so the message gets sent out
         self.loop.tick()
 
         message = messages[0]
-        self.assertEqual(message[0], "greetings")
-        self.assertEqual(message[1], "'sup yo")
-        self.assertEqual(message[2], obj.uuid)
+        self.assertEqual(message['subject'], "greetings")
+        self.assertEqual(message['body'], "'sup yo")
+        self.assertEqual(message['sender_id'], obj._get_message_identifier())
 
 
 class TestAwaitableLoopObject(utils.TestCaseWithLoop):

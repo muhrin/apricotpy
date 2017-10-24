@@ -359,8 +359,6 @@ class BaseEventLoop(AbstractEventLoop):
             obj = self._object_factory(self, object_type, *args, **kwargs)
 
         uuid = obj.uuid
-        self.messages().send("loop.object.{}.created".format(uuid), uuid)
-
         return obj
 
     def _create_handle(self, fn, args):

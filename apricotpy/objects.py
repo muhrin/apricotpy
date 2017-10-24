@@ -22,6 +22,8 @@ class LoopObject(object):
         self._uuid = uuid.uuid4()
         self._loop_callback = None
 
+        self.send_message('created', body=self._uuid)
+
     @property
     def uuid(self):
         return self._uuid
@@ -37,12 +39,32 @@ class LoopObject(object):
     def in_loop(self):
         return self._loop is not None
 
-    def send_message(self, subject, body=None):
+    def send_message(self, subject, recipient=None, body=None):
         """
         Send a message from this object.  The UUID will automatically be used
         as the sender id. 
         """
-        self.loop().messages().send(subject, body, self.uuid)
+        self.loop().messages().send(
+            subject=subject,
+            body=body,
+            recipient=recipient,
+            sender_id=self._get_message_identifier()
+        )
+
+    def enable_message_listening(self):
+        self.loop().messages.add_listener(
+            self.message_received,
+            sender_filter=self._get_message_identifier()
+        )
+
+    def disable_message_listening(self):
+        self.loop().messages.remove_listener(self.message_received)
+
+    def message_received(self, subject, body=None, recipient=None, sender_id=None):
+        pass
+
+    def _get_message_identifier(self):
+        return self.__class__.__name__ + '.' + str(self.uuid)
 
 
 class TickingMixin(with_metaclass(abc.ABCMeta, object)):

@@ -1,3 +1,4 @@
+import abc
 from collections import namedtuple
 import threading
 import re
@@ -5,6 +6,56 @@ import re
 from past.builtins import basestring
 
 _WilcardEntry = namedtuple("_WildcardEntry", ['re', 'listeners'])
+
+
+def _contains_wildcard(term):
+    """
+    Does the term contain one or more wildcard characters
+
+    :param term: The event string
+    :type term: basestring
+    :return: True if it does, False otherwise
+    """
+    return term.find('*') != -1 or term.find('#') != -1
+
+
+class Matcher(object):
+    def __init__(self, term):
+        self._term = term
+
+    def __hash__(self):
+        return self._term.__hash__()
+
+    def __eq__(self, other):
+        return self._term == other._term
+
+    @abc.abstractmethod
+    def match(self, query):
+        pass
+
+
+class ExactMatch(Matcher):
+    def match(self, query):
+        return query == self._term
+
+
+class WildcardMatch(Matcher):
+    def __init__(self, term):
+        if not _contains_wildcard(term):
+            ValueError("The term '{}' does not contain a wildcard character".format(term))
+        super(WildcardMatch, self).__init__(term)
+        regex = term.replace('.', '\.').replace('*', '.*').replace('#', '.+')
+        self._regex = re.compile(regex)
+
+    def match(self, query):
+        return self._regex.match(query) is not None
+
+
+def _create_matcher(term):
+    if _contains_wildcard(term):
+        return WildcardMatch(term)
+    else:
+        return ExactMatch(term)
 
 
 class Mailman(object):
@@ -36,162 +87,96 @@ class Mailman(object):
         :type loop: :class:`apricotpy.AbstractEventLoop`
         """
         self.__loop = loop
-        self._specific_listeners = {}
-        self._wildcard_listeners = {}
-        self._listeners_lock = threading.Lock()
+        self._listeners = {}
 
-    def add_listener(self, listener, subject='*'):
+    def add_listener(self, listener, subject_filter='*', sender_filter='*'):
         """
         Start listening to a particular event or a group of events.
 
-        :param listener: The listener callback function to call when the
-            event happens
-        :param subject: A subject string
-        :type subject: basestring
+        :param listener: The callback callable to call when the event happens
+        :param subject_filter: A filter on the subhect
+        :type subject_filter: basestring
+        :param sender_filter: A filter on the sender
         """
-        if subject is None:
-            raise ValueError("Invalid event '{}'".format(subject))
+        if subject_filter is None:
+            raise ValueError("Invalid event '{}'".format(subject_filter))
 
-        with self._listeners_lock:
-            self._check_listener(listener)
-            if self.contains_wildcard(subject):
-                self._add_wildcard_listener(listener, subject)
-            else:
-                self._add_specific_listener(listener, subject)
+        subject_matcher = _create_matcher(subject_filter)
+        sender_matcher = _create_matcher(sender_filter)
 
-    def remove_listener(self, listener, subject=None):
+        self._check_listener(listener)
+        self._listeners.setdefault(
+            (sender_matcher, subject_matcher), set()
+        ).add(listener)
+
+    def remove_listener(self, listener, subject_filter=None, sender_filter=None):
         """
         Stop listening for events.  If event is not specified it is assumed
         that the listener wants to stop listening to all events.
 
         :param listener: The listener that is currently listening
-        :param subject: (optional) subject to stop listening for
-        :type subject: basestring
+        :param subject_filter: (optional) subject to stop listening for
+        :type subject_filter: basestring
+        :param sender_filter: (optional) subject to stop listening for
+        :type subject_filter: basestring
         """
-        with self._listeners_lock:
-            if subject is None:
-                # This means remove ALL messages for this listener
-                for evt in list(self._specific_listeners.keys()):
-                    self._remove_specific_listener(listener, evt)
-                for evt in list(self._wildcard_listeners.keys()):
-                    self._remove_wildcard_listener(listener, evt)
+        for matchers, listeners in self._listeners.items():
+            if sender_filter is None:
+                sender_match = True
             else:
-                if self.contains_wildcard(subject):
-                    try:
-                        self._remove_wildcard_listener(listener, subject)
-                    except KeyError:
-                        pass
-                else:
-                    try:
-                        self._remove_specific_listener(listener, subject)
-                    except KeyError:
-                        pass
+                sender_match = matchers[0].match(sender_filter)
+            if subject_filter is None:
+                subject_match = True
+            else:
+                subject_match = matchers[1].match(subject_filter)
+            if sender_match and subject_match:
+                listeners.discard(listener)
 
     def clear_all_listeners(self):
-        with self._listeners_lock:
-            self._specific_listeners.clear()
-            self._wildcard_listeners.clear()
+        self._listeners.clear()
 
-    def num_listening(self):
-        """
-        Get the number of events that are being listening for.  This
-        corresponds exactly to the number of .start_listening() calls made
-        this this emitter.
-
-        :return: The number of events listened for
-        :rtype: int
-        """
-        with self._listeners_lock:
-            total = 0
-            for listeners in self._specific_listeners.values():
-                total += len(listeners)
-            for entry in self._wildcard_listeners.values():
-                total += len(entry.listeners)
-            return total
-
-    def send(self, subject, body=None, sender_id=None):
+    def send(self, subject, body=None, recipient=None, sender_id=None):
         """
         Send a message
 
         :param subject: The message subject
+        :type subject: basestring
         :param body: The body of the message
-        :param sender_id: An identifier for the sender, if LoopObject this will
-            be the UUID.
+        :param recipient: The recipient of the message (None unspecified)
+        :type recipient: basestring
+        :param sender_id: An identifier for the sender
+        :type sender_id: basestring
         """
         # These loops need to use copies because, e.g., the recipient may
         # add or remove listeners during the delivery
+        for matchers, listeners in self._listeners.items():
+            if recipient is None:
+                recipient_match = True
+            else:
+                recipient_match = matchers[0].match(recipient)
 
-        # Deal with the wildcard listeners
-        for evt, entry in self._wildcard_listeners.items():
-            if self._wildcard_match(evt, subject):
-                for l in list(entry.listeners):
-                    self._deliver_msg(l, subject, body, sender_id)
+            subject_match = matchers[1].match(subject)
+            if recipient_match and subject_match:
+                for listener in listeners:
+                    self._deliver_msg(listener, subject, body, recipient, sender_id)
 
-        # And now with the specific listeners
-        try:
-            for l in self._specific_listeners[subject].copy():
-                self._deliver_msg(l, subject, body, sender_id)
-        except KeyError:
-            pass
-
-    def specific_listeners(self):
-        return self._specific_listeners
-
-    def wildcard_listeners(self):
-        return self._wildcard_listeners
-
-    def _deliver_msg(self, listener, event, body, sender_id):
-        self.__loop.call_soon(listener, self.__loop, event, body, sender_id)
+    def _deliver_msg(self, listener, subject, body, recipient, sender_id):
+        """
+        :param listener: The listener callable
+        :param subject: The subject of the message
+        :type subject: basestring
+        :param body: The body of the message
+        :param recipient: The targeted recipient of the message (could be None)
+        :type recipient: basestring or None
+        :param sender_id: An identifier for the sender
+        :type sender_id: basestring
+        :return: 
+        """
+        self.__loop.call_soon(listener, self.__loop, subject, recipient, body, sender_id)
 
     @staticmethod
     def _check_listener(listener):
         if not callable(listener):
-            raise ValueError("Listener must be callable")
+            raise ValueError("Listener must be callable, got '{}".format(type(listener)))
             # Can do more sophisticated checks here, but it's a pain (to check both
             # classes that are callable having the right signature and plain functions)
-
-    def _add_wildcard_listener(self, listener, subject):
-        if subject in self._wildcard_listeners:
-            self._wildcard_listeners[subject].listeners.add(listener)
-        else:
-            # Build the regular expression
-            regex = subject.replace('.', '\.').replace('*', '.*').replace('#', '.+')
-            self._wildcard_listeners[subject] = _WilcardEntry(re.compile(regex), {listener})
-
-        self.send('mailman.listener_added.{}'.format(subject))
-
-    def _remove_wildcard_listener(self, listener, subject):
-        """
-        Remove a wildcard listener.
-        Precondition: listener in self._wildcard_listeners[event]
-
-        :param listener: The listener to remove
-        :param subject: The subject to stop listening for
-        """
-        self._wildcard_listeners[subject].listeners.discard(listener)
-        if len(self._wildcard_listeners[subject].listeners) == 0:
-            del self._wildcard_listeners[subject]
-
-        self.send('mailman.listener_removed.{}'.format(subject))
-
-    def _add_specific_listener(self, listener, subject):
-        self._specific_listeners.setdefault(subject, set()).add(listener)
-
-        self.send('mailman.listener_added.{}'.format(subject))
-
-    def _remove_specific_listener(self, listener, subject):
-        """
-        Remove a specific listener.
-        Precondition: listener in self._specific_listeners[event]
-
-        :param listener: The listener to remove
-        :param subject: The subject to stop listening for
-        """
-        self._specific_listeners[subject].discard(listener)
-        if len(self._specific_listeners[subject]) == 0:
-            del self._specific_listeners[subject]
-
-        self.send('mailman.listener_removed.{}'.format(subject))
-
-    def _wildcard_match(self, event, to_match):
-        return self._wildcard_listeners[event].re.match(to_match) is not None

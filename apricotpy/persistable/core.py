@@ -48,7 +48,8 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     def save_instance_state(self, out_state):
         loop = self.loop()
         if loop is not None:
-            out_state[self.SCHEDULED_CALLBACKS] = tuple(loop._get_owning_callback_handles(self))
+            out_state[self.SCHEDULED_CALLBACKS] = \
+                tuple(loop._get_owning_callback_handles(self))
 
     @abc.abstractmethod
     def load_instance_state(self, saved_state):
