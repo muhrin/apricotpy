@@ -2,7 +2,7 @@ import apricotpy
 import unittest
 
 
-class TestStackDepth(apricotpy.Task):
+class StackDepthTester(apricotpy.Task):
     def execute(self):
         assert len(apricotpy.events._running_loop._loop) == 2
 
@@ -10,7 +10,7 @@ class TestStackDepth(apricotpy.Task):
 class LoopStackTester(apricotpy.Task):
     def execute(self):
         subloop = apricotpy.new_event_loop()
-        test = subloop.create(TestStackDepth)
+        test = subloop.create(StackDepthTester)
         subloop.run_until_complete(test)
 
 
