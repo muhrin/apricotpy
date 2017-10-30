@@ -354,12 +354,9 @@ class BaseEventLoop(AbstractEventLoop):
 
     def _create(self, object_type, *args, **kwargs):
         if self._object_factory is None:
-            obj = object_type(*args, **kwargs)
+            return object_type(*args, **kwargs)
         else:
-            obj = self._object_factory(self, object_type, *args, **kwargs)
-
-        uuid = obj.uuid
-        return obj
+            return self._object_factory(object_type, *args, **kwargs)
 
     def _create_handle(self, fn, args):
         return events.Handle(fn, args, self)

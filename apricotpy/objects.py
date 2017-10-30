@@ -52,16 +52,19 @@ class LoopObject(object):
         )
 
     def enable_message_listening(self):
-        self.loop().messages.add_listener(
-            self.message_received,
+        self.loop().messages().add_listener(
+            self._message_received,
             sender_filter=self._get_message_identifier()
         )
 
     def disable_message_listening(self):
-        self.loop().messages.remove_listener(self.message_received)
+        self.loop().messages.remove_listener(self._message_received)
 
-    def message_received(self, subject, body=None, recipient=None, sender_id=None):
+    def message_received(self, loop, subject, body=None, sender_id=None):
         pass
+
+    def _message_received(self, loop, subject, body=None, recipient=None, sender_id=None):
+        self.message_received(loop, subject, body, sender_id)
 
     def _get_message_identifier(self):
         return self.__class__.__name__ + '.' + str(self.uuid)
