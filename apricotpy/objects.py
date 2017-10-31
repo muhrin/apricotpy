@@ -22,8 +22,6 @@ class LoopObject(object):
         self._uuid = uuid.uuid4()
         self._loop_callback = None
 
-        self.send_message('created', body=self._uuid)
-
     @property
     def uuid(self):
         return self._uuid

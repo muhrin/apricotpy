@@ -23,20 +23,6 @@ class TestEventLoop(utils.TestCaseWithLoop):
     def test_create(self):
         obj = self.loop.create(StringObj, 'mmmm...apricot pie')
 
-    def test_create_message(self):
-        messages = []
-        got_message = utils.get_message_capture_fn(messages)
-
-        self.loop.messages().add_listener(
-            got_message, subject_filter='created', sender_filter='StringObj.*')
-        obj = self.loop.create(StringObj, 'created')
-        # Tick so the message gets sent out
-        self.loop.tick()
-
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]['subject'], 'created'.format(obj.uuid))
-        self.assertEqual(messages[0]['body'], obj.uuid)
-
     def test_default_error_handler(self):
         # Now try a context with a traceback
         try:
