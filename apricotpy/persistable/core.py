@@ -60,8 +60,17 @@ class LoopPersistable(with_metaclass(abc.ABCMeta, object)):
     def save_instance_state(self, out_state):
         loop = self.loop()
         if loop is not None:
-            out_state[self.SCHEDULED_CALLBACKS] = \
-                list(loop._get_owning_callback_handles(self))
+            callbacks = []
+            # TODO: If something fails before we reach saving the callbacks
+            # in the out_state then encode will already have stored the bundles
+            # this may not be the desired behaviour
+            for cb in loop._get_owning_callback_handles(self):
+                try:
+                    callbacks.append(out_state._encode(cb))
+                except ValueError:
+                    _LOGGER.warning("Callback '{}' is not persistable".format(cb))
+            out_state[self.SCHEDULED_CALLBACKS] = callbacks
+
         out_state[self.PERSISTABLE_ID] = self.persistable_id
         if self._store is not None:
             out_state[self.STORE] = self._store.__dict__
@@ -102,6 +111,9 @@ def _check_valid_bundle_key(key):
 
 
 def _check_valid_bundle_value(value):
+    if isinstance(value, _Reference):
+        return
+
     if isinstance(value, LoopPersistable):
         return
 
@@ -130,6 +142,7 @@ class PersistableValueNamespace(object):
     A namespace to store persistable values that can be put in a
     bundle.
     """
+
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
@@ -237,6 +250,9 @@ class Bundle(dict):
 
     def _encode(self, value):
         _check_valid_bundle_value(value)
+
+        if isinstance(value, _Reference):
+            return value
 
         if isinstance(value, apricotpy.LoopObject) and \
                 not isinstance(value, LoopPersistable):
