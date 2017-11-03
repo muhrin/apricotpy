@@ -49,8 +49,18 @@ class WildcardMatch(Matcher):
         return self._regex.match(query) is not None
 
 
+class AnyMatcher(Matcher):
+    def __init__(self):
+        super(AnyMatcher, self).__init__(None)
+
+    def match(self, query):
+        return True
+
+
 def _create_matcher(term):
-    if _contains_wildcard(term):
+    if term is None or term == '*':
+        return AnyMatcher()
+    elif _contains_wildcard(term):
         return WildcardMatch(term)
     else:
         return ExactMatch(term)
@@ -87,27 +97,32 @@ class Mailman(object):
         self.__loop = loop
         self._listeners = {}
 
-    def add_listener(self, listener, subject_filter='*', sender_filter='*'):
+    def add_listener(self, listener, subject_filter='*', recipient_id=None):
         """
         Start listening to a particular event or a group of events.
+        
+        Setting subject_filter or recipient_id to None or '*' will listen to 
+        messages with any subject or for messages broadcast too all recipients
+        respectively.
 
         :param listener: The callback callable to call when the event happens
-        :param subject_filter: A filter on the subhect
+        :param subject_filter: A filter on the subject
         :type subject_filter: basestring
-        :param sender_filter: A filter on the sender
+        :param recipient_id: If specified will listen to messages destined for
+            this recipient only.
         """
-        if subject_filter is None:
-            raise ValueError("Invalid event '{}'".format(subject_filter))
-
         subject_matcher = _create_matcher(subject_filter)
-        sender_matcher = _create_matcher(sender_filter)
+        if recipient_id is None or recipient_id == '*':
+            sender_matcher = AnyMatcher()
+        else:
+            sender_matcher = ExactMatch(recipient_id)
 
         self._check_listener(listener)
         self._listeners.setdefault(
             (sender_matcher, subject_matcher), set()
         ).add(listener)
 
-    def remove_listener(self, listener, subject_filter=None, sender_filter=None):
+    def remove_listener(self, listener, subject_filter=None, recipient_id=None):
         """
         Stop listening for events.  If event is not specified it is assumed
         that the listener wants to stop listening to all events.
@@ -115,14 +130,14 @@ class Mailman(object):
         :param listener: The listener that is currently listening
         :param subject_filter: (optional) subject to stop listening for
         :type subject_filter: basestring
-        :param sender_filter: (optional) subject to stop listening for
+        :param recipient_id: (optional) subject to stop listening for
         :type subject_filter: basestring
         """
         for matchers, listeners in self._listeners.items():
-            if sender_filter is None:
+            if recipient_id is None:
                 sender_match = True
             else:
-                sender_match = matchers[0].match(sender_filter)
+                sender_match = matchers[0].match(recipient_id)
             if subject_filter is None:
                 subject_match = True
             else:
@@ -133,44 +148,39 @@ class Mailman(object):
     def clear_all_listeners(self):
         self._listeners.clear()
 
-    def send(self, subject, body=None, recipient=None, sender_id=None):
+    def send(self, subject, body=None, to=None, sender_id=None):
         """
         Send a message
 
         :param subject: The message subject
         :type subject: basestring
         :param body: The body of the message
-        :param recipient: The recipient of the message (None unspecified)
-        :type recipient: basestring
+        :param to: The recipient of the message, None means broadcast to all
         :param sender_id: An identifier for the sender
         :type sender_id: basestring
         """
         # These loops need to use copies because, e.g., the recipient may
         # add or remove listeners during the delivery
         for matchers, listeners in self._listeners.items():
-            if recipient is None:
-                recipient_match = True
-            else:
-                recipient_match = matchers[0].match(recipient)
-
+            recipient_match = matchers[0].match(to)
             subject_match = matchers[1].match(subject)
             if recipient_match and subject_match:
                 for listener in listeners:
-                    self._deliver_msg(listener, subject, body, recipient, sender_id)
+                    self._deliver_msg(listener, subject, body, to, sender_id)
 
-    def _deliver_msg(self, listener, subject, body, recipient, sender_id):
+    def _deliver_msg(self, listener, subject, body, to, sender_id):
         """
         :param listener: The listener callable
         :param subject: The subject of the message
         :type subject: basestring
         :param body: The body of the message
-        :param recipient: The targeted recipient of the message (could be None)
-        :type recipient: basestring or None
+        :param to: The targeted recipient of the message (could be None)
+        :type to: basestring or None
         :param sender_id: An identifier for the sender
         :type sender_id: basestring
         :return: 
         """
-        self.__loop.call_soon(listener, self.__loop, subject, recipient, body, sender_id)
+        self.__loop.call_soon(listener, self.__loop, subject, to, body, sender_id)
 
     @staticmethod
     def _check_listener(listener):

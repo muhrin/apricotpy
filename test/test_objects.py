@@ -29,7 +29,7 @@ class TestLoopObject(utils.TestCaseWithLoop):
         message = messages[0]
         self.assertEqual(message['subject'], "greetings")
         self.assertEqual(message['body'], "'sup yo")
-        self.assertEqual(message['sender_id'], obj._get_message_identifier())
+        self.assertEqual(message['sender_id'], obj.uuid)
 
 
 class TestAwaitableLoopObject(utils.TestCaseWithLoop):
@@ -42,7 +42,7 @@ class TestAwaitableLoopObject(utils.TestCaseWithLoop):
         self.assertEqual(awaitable.result(), result)
 
     def test_cancel(self):
-        awaitable = self.loop.create(AwaitableObject)
+        awaitable = AwaitableObject()
 
         self.loop.call_soon(awaitable.cancel)
         with self.assertRaises(apricotpy.CancelledError):

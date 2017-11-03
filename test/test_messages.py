@@ -13,7 +13,7 @@ class TestFuture(utils.TestCaseWithLoop):
             'subject': 'test subject',
             'body': 'test body',
             'sender_id': 'test sender',
-            'recipient': None
+            'to': None
         }
         self.loop.messages().add_listener(got_message, subject_filter=msg['subject'])
         self.loop.messages().send(**msg)
@@ -21,7 +21,7 @@ class TestFuture(utils.TestCaseWithLoop):
         self.assertTrue(received)
         self.assertEqual(received[0], msg)
 
-    def test_wildcard_sender(self):
+    def test_broadcast_sender(self):
         received = []
         got_message = utils.get_message_capture_fn(received)
 
@@ -31,20 +31,19 @@ class TestFuture(utils.TestCaseWithLoop):
                 'subject': 'test subject',
                 'body': 'test body',
                 'sender_id': 'test sender 1',
-                'recipient': None
+                'to': None
             },
             {
                 'subject': 'test subject',
                 'body': 'test body',
                 'sender_id': 'test sender 2',
-                'recipient': None
+                'to': None
             },
         ]
 
-        # Try the two types of wildcard
-        for wildcard in ['*', '#']:
-            self.loop.messages().add_listener(
-                got_message, sender_filter='test sender {}'.format(wildcard))
+        # Try the two ways to specify a broadcast
+        for recipient_id in ['*', None]:
+            self.loop.messages().add_listener(got_message, recipient_id=recipient_id)
             for msg in msgs:
                 self.loop.messages().send(**msg)
             self.loop.tick()
@@ -62,19 +61,19 @@ class TestFuture(utils.TestCaseWithLoop):
                 'subject': 'test subject 1',
                 'body': 'test body',
                 'sender_id': 'test sender',
-                'recipient': None
+                'to': None
             },
             {
                 'subject': 'test subject 20',
                 'body': 'test body',
                 'sender_id': 'test sender',
-                'recipient': None
+                'to': None
             },
         ]
         # Try the two types of wildcard
         for wildcard in ['*', '#']:
             self.loop.messages().add_listener(
-                got_message, sender_filter='test subject {}'.format(wildcard))
+                got_message, subject_filter='test subject {}'.format(wildcard))
             for msg in msgs:
                 self.loop.messages().send(**msg)
             self.loop.tick()

@@ -26,7 +26,7 @@ class TaskWithContinue(persistable.Task):
 
 class TestPersistableTask(utils.TestCaseWithLoop):
     def test_continue(self):
-        task = self.loop.create(TaskWithContinue)
+        task = TaskWithContinue()
 
         saved_state = persistable.Bundle(task)
 
@@ -45,7 +45,7 @@ class TestPersistableTask(utils.TestCaseWithLoop):
 
     def test_await(self):
         # Tick 0
-        task = self.loop.create(PersistableTask)
+        task = PersistableTask()
         saved_state = persistable.Bundle(task)
 
         # Finish

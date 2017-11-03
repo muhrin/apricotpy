@@ -12,6 +12,9 @@ __all__ = ['LoopObject',
 
 
 class LoopObject(object):
+    # Class defaults
+    _listening_for_messages = False
+
     def __init__(self, loop=None):
         super(LoopObject, self).__init__()
 
@@ -21,6 +24,7 @@ class LoopObject(object):
             self._loop = loop
         self._uuid = uuid.uuid4()
         self._loop_callback = None
+        self.enable_message_listening()
 
     @property
     def uuid(self):
@@ -37,35 +41,43 @@ class LoopObject(object):
     def in_loop(self):
         return self._loop is not None
 
-    def send_message(self, subject, recipient=None, body=None):
+    def send_message(self, subject, to=None, body=None):
         """
         Send a message from this object.  The UUID will automatically be used
-        as the sender id. 
+        as the sender id.
+        
+        If no recipient is specified (to=None) then the message will be broadcast
+        to anyone listening.
+        
+        :param subject: The message subject
+        :type subject: basestring
+        :param to: The recipient of the message, can be None.
+        :param body: The body of the message, can be None.
         """
         self.loop().messages().send(
             subject=subject,
             body=body,
-            recipient=recipient,
-            sender_id=self._get_message_identifier()
+            to=to,
+            sender_id=self.uuid
         )
 
     def enable_message_listening(self):
-        self.loop().messages().add_listener(
-            self._message_received,
-            sender_filter=self._get_message_identifier()
-        )
+        if not self._listening_for_messages:
+            self.loop().messages().add_listener(
+                self._message_received, recipient_id=self._uuid)
+            self._listening_for_messages = True
 
     def disable_message_listening(self):
-        self.loop().messages.remove_listener(self._message_received)
+        if self._listening_for_messages:
+            self.loop().messages().remove_listener(
+                self._message_received)
+            self._listening_for_messages = False
 
-    def message_received(self, loop, subject, body=None, sender_id=None):
+    def message_received(self, subject, body, sender_id):
         pass
 
-    def _message_received(self, loop, subject, body=None, recipient=None, sender_id=None):
-        self.message_received(loop, subject, body, sender_id)
-
-    def _get_message_identifier(self):
-        return self.__class__.__name__ + '.' + str(self.uuid)
+    def _message_received(self, loop, subject, to=None, body=None, sender_id=None):
+        self.message_received(subject, body, sender_id)
 
 
 class TickingMixin(with_metaclass(abc.ABCMeta, object)):
@@ -116,34 +128,23 @@ class AwaitableMixin(futures.Awaitable):
     def result(self):
         return self._future.result()
 
-    def set_result(self, result):
-        self._future.set_result(result)
-
     def exception(self):
         return self._future.exception()
-
-    def set_exception(self, exception):
-        self._future.set_exception(exception)
-
-    def cancel(self):
-        self._future.cancel()
 
     def cancelled(self):
         return self._future.cancelled()
 
     def add_done_callback(self, fn):
-        """
-        Add a callback to be run when the future becomes done.
-
-        :param fn: The callback function.
-        """
-        self._future.add_done_callback(fn)
+        return self._future.add_done_callback(fn)
 
     def remove_done_callback(self, fn):
-        """
-        Remove all the instances of the callback function from the call when done list.
+        return self._future.remove_done_callback(fn)
 
-        :return: The number of callback instances removed
-        :rtype: int
-        """
-        self._future.remove_done_callback(fn)
+    def cancel(self):
+        return self._future.cancel()
+
+    def set_result(self, result):
+        self._future.set_result(result)
+
+    def set_exception(self, exception):
+        self._future.set_exception(exception)

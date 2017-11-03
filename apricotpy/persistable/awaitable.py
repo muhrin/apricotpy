@@ -17,6 +17,9 @@ class MakeAwaitableMixinPersistable(object):
         super(MakeAwaitableMixinPersistable, self).__init__(*args, **kwargs)
         self._future = futures.Future(loop=kwargs.get('loop', None))
 
+    def loop(self):
+        return self._loop
+
     def save_instance_state(self, out_state):
         super(MakeAwaitableMixinPersistable, self).save_instance_state(out_state)
 

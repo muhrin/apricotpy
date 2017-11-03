@@ -20,10 +20,10 @@ def get_message_capture_fn(capture_list):
     return functools.partial(get_message, capture_list)
 
 
-def get_message(receive_list, loop, subject, recipient, body, sender_id):
+def get_message(receive_list, loop, subject, to, body, sender_id):
     receive_list.append({
         'subject': subject,
-        'recipient': recipient,
+        'to': to,
         'body': body,
         'sender_id': sender_id
     })
