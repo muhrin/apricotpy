@@ -117,7 +117,10 @@ class AwaitableMixin(futures.Awaitable):
     def __init__(self, *args, **kwargs):
         assert isinstance(self, LoopObject), "Must be used with a loop object"
         super(AwaitableMixin, self).__init__(*args, **kwargs)
-        self._future = futures.Future(loop=kwargs.get('loop', None))
+        try:
+            self._future = futures.Future(loop=self.loop())
+        except AttributeError:
+            self._future = futures.Future(loop=kwargs.get('loop', None))
 
     def __invert__(self):
         return self._loop.run_until_complete(self)

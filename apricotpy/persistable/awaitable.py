@@ -15,7 +15,7 @@ class MakeAwaitableMixinPersistable(object):
         assert isinstance(self, apricotpy.AwaitableMixin), \
             "Has to be used with an AwaitableMixin"
         super(MakeAwaitableMixinPersistable, self).__init__(*args, **kwargs)
-        self._future = futures.Future(loop=kwargs.get('loop', None))
+        self._future = futures.Future(loop=self.loop())
 
     def loop(self):
         return self._loop
