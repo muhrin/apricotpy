@@ -3,7 +3,7 @@ import apricotpy
 from apricotpy import objects
 from . import core
 
-__all__ = ['LoopObject']
+__all__ = ['LoopObject', 'PersistableLoopObjectMixin']
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import apricotpy
 from . import futures
 from . import objects
 
-__all__ = ['AwaitableLoopObject']
+__all__ = ['AwaitableLoopObject', 'AwaitableMixin']
 
 
 class MakeAwaitableMixinPersistable(object):
@@ -36,8 +36,8 @@ class AwaitableMixin(MakeAwaitableMixinPersistable, apricotpy.AwaitableMixin):
 
 
 class AwaitableLoopObject(
-    AwaitableMixin,
-    objects.LoopObject):  # Start as a persistable LoopObject
+    objects.LoopObject,  # Start as a persistable LoopObject
+    futures.Future):
     """
     A convenience class that gives a LoopObject that is both LoopPersistable and
     Awaitable.
