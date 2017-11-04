@@ -1,5 +1,6 @@
 import apricotpy
 import unittest
+from . import utils
 
 
 class TestStackDepth(apricotpy.Task):
@@ -10,7 +11,7 @@ class TestStackDepth(apricotpy.Task):
 class LoopStackTester(apricotpy.Task):
     def execute(self):
         subloop = apricotpy.new_event_loop()
-        test = subloop.create(TestStackDepth)
+        test = subloop.create(TestStackDepth).play()
         subloop.run_until_complete(test)
 
 
@@ -24,5 +25,6 @@ class TestDefaultLoop(unittest.TestCase):
         self.assertIsNotNone(apricotpy.get_event_loop_policy())
 
     def test_loop_stack(self):
-        tester = apricotpy.get_event_loop().create(LoopStackTester)
-        apricotpy.get_event_loop().run_until_complete(tester)
+        loop = apricotpy.get_event_loop()
+        tester = loop.create(LoopStackTester).play()
+        loop.run_until_complete(tester)

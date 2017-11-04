@@ -18,7 +18,7 @@ class EventuallyFive(apricotpy.Task):
 
 class AwaitFive(apricotpy.Task):
     def execute(self):
-        return apricotpy.Await(self.loop().create(Five), self.finish)
+        return apricotpy.Await(Five().play(), self.finish)
 
     def finish(self, value):
         return value
@@ -26,19 +26,18 @@ class AwaitFive(apricotpy.Task):
 
 class TestTask(utils.TestCaseWithLoop):
     def test_simple(self):
-        five = self.loop.create(Five)
+        five = Five().play()
         result = self.loop.run_until_complete(five)
 
         self.assertEqual(result, 5)
 
     def test_continue(self):
-        five = self.loop.create(EventuallyFive)
+        five = EventuallyFive().play()
         result = self.loop.run_until_complete(five)
 
         self.assertEqual(result, 5)
 
     def test_await(self):
-        await_five = self.loop.create(AwaitFive)
+        await_five = AwaitFive().play()
         result = self.loop.run_until_complete(await_five)
-
         self.assertEqual(result, 5)

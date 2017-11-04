@@ -10,7 +10,7 @@ class PersistableFive(persistable.Task):
 
 class PersistableTask(persistable.Task):
     def execute(self):
-        return apricotpy.Await(self.loop().create(PersistableFive), self.finish)
+        return apricotpy.Await(PersistableFive().play(), self.finish)
 
     def finish(self, value):
         return value
@@ -26,7 +26,7 @@ class TaskWithContinue(persistable.Task):
 
 class TestPersistableTask(utils.TestCaseWithLoop):
     def test_continue(self):
-        task = TaskWithContinue()
+        task = TaskWithContinue().play()
 
         saved_state = persistable.Bundle(task)
 
@@ -45,7 +45,7 @@ class TestPersistableTask(utils.TestCaseWithLoop):
 
     def test_await(self):
         # Tick 0
-        task = PersistableTask()
+        task = PersistableTask().play()
         saved_state = persistable.Bundle(task)
 
         # Finish

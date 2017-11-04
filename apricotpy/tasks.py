@@ -33,9 +33,13 @@ class Await(_TaskDirective):
 _NO_RESULT = ()
 
 
-class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin)):
-
+class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin),
+                objects.Playable):
     Terminated = namedtuple("Terminated", ['result'])
+
+    # Class defaults
+    _callback_handle = None
+    _paused = True
 
     def __init__(self, *args, **kwargs):
         super(TaskMixin, self).__init__(*args, **kwargs)
@@ -43,11 +47,6 @@ class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin)):
         self._awaiting = None
         self._next_step = None
         self._awaiting_result = _NO_RESULT
-
-        self._paused = False
-        self._callback_handle = None
-
-        self._schedule_step()
 
     def awaiting(self):
         """
@@ -60,33 +59,26 @@ class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin)):
         """
         Play the task if it was paused.
         """
-        if self.done() or self.is_playing():
-            return False
+        if not self.done() and not self.is_playing():
+            self._paused = False
+            if self._awaiting is None:
+                self._schedule_step()
 
-        self._paused = False
-        if self._awaiting is None:
-            self._schedule_step()
-
-        return True
+        return self
 
     def pause(self):
         """
         Pause a playing task.
         """
-        if not self.is_playing():
-            return True
+        if self.is_playing() and not self.done():
+            # Could be None if we are awaiting something
+            if self._callback_handle is not None:
+                self._callback_handle.cancel()
+                self._callback_handle = None
 
-        if self.done():
-            return False
+            self._paused = True
 
-        # Could be None if we are awaiting something
-        if self._callback_handle is not None:
-            self._callback_handle.cancel()
-            self._callback_handle = None
-
-        self._paused = True
-
-        return True
+        return self
 
     def is_playing(self):
         return not self._paused
@@ -166,9 +158,9 @@ class TaskMixin(with_metaclass(abc.ABCMeta, objects.AwaitableMixin)):
 
 
 class Task(with_metaclass(
-        abc.ABCMeta,
-        TaskMixin, objects.LoopObject
-    )):
+    abc.ABCMeta,
+    TaskMixin, objects.LoopObject
+)):
     """
     A task is an awaitable loop object which has an execute() method
     that will be called when it is inserted into the loop.

@@ -80,27 +80,60 @@ class LoopObject(object):
         self.message_received(subject, body, sender_id)
 
 
-class TickingMixin(with_metaclass(abc.ABCMeta, object)):
+class Playable(with_metaclass(abc.ABCMeta, object)):
+    """ An interface that defines an object that can be played and paused """
+
+    @abc.abstractmethod
+    def play(self):
+        """
+        Play the object.  It it is called and the object is playing already
+        this call has no effect.
+        :return: The object itself
+        """
+        pass
+
+    @abc.abstractmethod
+    def pause(self):
+        """
+        Pause the object.  If it is called and the object is paused already
+        this call has no effect.
+        :return: The object itself
+        """
+        pass
+
+    @abc.abstractmethod
+    def is_playing(self):
+        """
+        Is the process playing
+        :return: True if playing, False otherwise
+        :rtype: bool
+        """
+        pass
+
+
+class TickingMixin(with_metaclass(abc.ABCMeta, object), Playable):
     """
     A mixin that makes a LoopObject be 'ticked' each time around the event
     loop.  The user code should go in the `tick()` function.
     """
-
-    def __init__(self, *args, **kwargs):
-        super(TickingMixin, self).__init__(*args, **kwargs)
-        self._callback_handle = self.loop().call_soon(self._tick)
+    # Class level defaults
+    _callback_handle = None
 
     @abc.abstractmethod
     def tick(self):
         pass
 
     def pause(self):
-        self._callback_handle.cancel()
-        self._callback_handle = None
+        if self._callback_handle is not None:
+            self._callback_handle.cancel()
+            self._callback_handle = None
 
     def play(self):
         if self._callback_handle is None:
             self._callback_handle = self.loop().call_soon(self._tick)
+
+    def is_playing(self):
+        return self._callback_handle is not None
 
     def _tick(self):
         self.tick()
