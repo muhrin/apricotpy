@@ -73,6 +73,9 @@ def _format_callback_source(func, args):
 
 
 class Handle(object):
+    # Class defaults
+    _source_traceback = None
+
     def __init__(self, fn, args, loop):
         assert fn is not None
 
@@ -83,8 +86,6 @@ class Handle(object):
         self._repr = None
         if self._loop.get_debug():
             self._source_traceback = traceback.extract_stack(sys._getframe(1))
-        else:
-            self._source_traceback = None
 
     def _repr_info(self):
         info = [self.__class__.__name__]
