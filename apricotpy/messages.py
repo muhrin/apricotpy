@@ -119,8 +119,8 @@ class Mailman(object):
 
         self._check_listener(listener)
         self._listeners.setdefault(
-            (sender_matcher, subject_matcher), set()
-        ).add(listener)
+            (sender_matcher, subject_matcher), list()
+        ).append(listener)
 
     def remove_listener(self, listener, subject_filter=None, recipient_id=None):
         """
